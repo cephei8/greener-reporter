@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag'
+        required: true
+        type: string
+jobs:
+  release_build:
+    name: (Release) Build libs on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_name: 'linux-x64'
+          - os: windows-latest
+            target_name: 'win-x64'
+          - os: macos-13
+            target_name: 'mac-x64'
+          - os: macos-14
+            target_name: 'mac-arm64'
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - if: matrix.target_name == 'mac-x64'
+        name: Verify hardware platform
+        run: if [[ $(uname -m | tr -d '[:space:]') != "x86_64" ]]; then exit 1; fi
+
+      - if: matrix.target_name == 'mac-arm64'
+        name: Verify hardware platform
+        run: if [[ $(uname -m | tr -d '[:space:]') != "arm64" ]]; then exit 1; fi
+
+      - uses: actions/checkout@v5
+
+      - run: cargo build --release
+
+      - if: runner.os == 'macOS'
+        name: Fix rpath for libs
+        run: |
+          install_name_tool -id @rpath/libgreener_reporter.dylib target/release/libgreener_reporter.dylib
+          install_name_tool -id @rpath/libgreener_servermock.dylib target/release/libgreener_servermock.dylib
+
+      - if: runner.os == 'Windows'
+        name: Rename lib files
+        run: |
+          cp target/release/greener_reporter.dll.lib target/release/greener_reporter.lib
+          cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
+
+      - run: cargo test --release
+
+      - name: Create release tar directories
+        run: |
+          mkdir -p release_tar/reporter
+          mkdir -p release_tar/servermock
+
+      - if: runner.os == 'Linux'
+        name: Prepare release tar directories
+        run: |
+          cp target/release/libgreener_reporter.so release_tar/reporter
+          cp target/release/libgreener_servermock.so release_tar/servermock
+
+      - if: runner.os == 'Windows'
+        name: Prepare release tar directories
+        run: |
+          cp target/release/greener_reporter.dll release_tar/reporter
+          cp target/release/greener_reporter.lib release_tar/reporter
+          cp target/release/greener_servermock.dll release_tar/servermock
+          cp target/release/greener_servermock.lib release_tar/servermock
+
+      - if: runner.os == 'macOS'
+        name: Prepare release tar directories
+        run: |
+          cp target/release/libgreener_reporter.dylib release_tar/reporter
+          cp target/release/libgreener_servermock.dylib release_tar/servermock
+
+      - name: Create release tars
+        run: |
+          tar -czf greener-reporter-lib-${{ matrix.target_name }}.tar.gz -C release_tar/reporter .
+          tar -czf greener-servermock-lib-${{ matrix.target_name }}.tar.gz -C release_tar/servermock .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
+          path: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
+          path: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  release_create:
+    name: (Release) Create release
+    needs: release_build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: release_tars
+          merge-multiple: true
+
+      - name: Create include tars
+        working-directory: release_tars
+        run: |
+          tar -czf greener-reporter-include.tar.gz -C ../dist/include greener_reporter
+          tar -czf greener-servermock-include.tar.gz -C ../dist/include greener_servermock
+
+      - name: Create release
+        run: |
+          gh release create ${{ inputs.release_tag }} ./release_tars/*
+        env:
+          GH_TOKEN: ${{ github.token }}
