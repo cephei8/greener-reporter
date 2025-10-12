@@ -1,0 +1,15 @@
+[package]
+name = "reporter-cli"
+version = "0.0.1"
+edition = "2024"
+
+[[bin]]
+name = "greener-reporter-cli"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive", "env"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["serde", "v4"] }

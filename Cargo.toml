@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "reporter",
+    "reporter-cli",
     "servermock",
     "tests-ffi",
 ]
