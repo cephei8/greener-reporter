@@ -12,27 +12,8 @@ pub struct IngressClient {
 }
 
 impl IngressClient {
-    pub fn new() -> Result<Self, ReporterError> {
+    pub fn new(endpoint: String, api_key: String) -> Result<Self, ReporterError> {
         let client = Client::new();
-        let endpoint = match std::env::var("GREENER_INGRESS_ENDPOINT") {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(ReporterError::InvalidArgument(format!(
-                    "cannot get GREENER_INGRESS_ENDPOINT: {}",
-                    e
-                )));
-            }
-        };
-
-        let api_key = match std::env::var("GREENER_INGRESS_API_KEY") {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(ReporterError::InvalidArgument(format!(
-                    "cannot get GREENER_INGRESS_API_KEY: {}",
-                    e
-                )));
-            }
-        };
 
         Ok(IngressClient {
             client,
@@ -44,7 +25,7 @@ impl IngressClient {
     pub async fn create_session(&self, session: SessionRequest) -> Result<String, ReporterError> {
         let resp = self
             .client
-            .post(format!("{}/ingress/sessions", self.endpoint))
+            .post(format!("{}/api/v1/ingress/sessions", self.endpoint))
             .header("X-API-Key", &self.api_key)
             .json(&session)
             .send()
@@ -79,7 +60,7 @@ impl IngressClient {
     ) -> Result<(), ReporterError> {
         let resp = self
             .client
-            .post(format!("{}/ingress/testcases", self.endpoint))
+            .post(format!("{}/api/v1/ingress/testcases", self.endpoint))
             .header("X-API-KEY", &self.api_key)
             .json(&TestcasesRequest { testcases })
             .send()

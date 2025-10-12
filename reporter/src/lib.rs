@@ -5,6 +5,8 @@ mod models;
 mod reporter;
 
 pub use errors::ReporterError;
+pub use models::Label;
+pub use models::SessionRequest;
 pub use models::TestcaseRequest;
 pub use models::TestcaseStatus;
 pub use reporter::Reporter;
@@ -62,12 +64,38 @@ fn set_error(err: ReporterError, err_result: *mut *const GreenerReporterError) {
 /// The caller must ensure that all pointers are valid if not null.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn greener_reporter_new(
+    endpoint: *const c_char,
+    api_key: *const c_char,
     error: *mut *const GreenerReporterError,
 ) -> *mut Reporter {
     unsafe {
         *error = std::ptr::null_mut();
     }
-    match Reporter::new() {
+
+    if endpoint.is_null() {
+        set_error(
+            ReporterError::InvalidArgument("endpoint pointer is null".into()),
+            error,
+        );
+        return ptr::null_mut();
+    }
+
+    if api_key.is_null() {
+        set_error(
+            ReporterError::InvalidArgument("api_key pointer is null".into()),
+            error,
+        );
+        return ptr::null_mut();
+    }
+
+    let endpoint_str = unsafe { CStr::from_ptr(endpoint) }
+        .to_string_lossy()
+        .to_string();
+    let api_key_str = unsafe { CStr::from_ptr(api_key) }
+        .to_string_lossy()
+        .to_string();
+
+    match Reporter::new(endpoint_str, api_key_str) {
         Ok(reporter) => Box::into_raw(Box::new(reporter)),
         Err(e) => {
             set_error(e, error);
@@ -105,6 +133,10 @@ pub unsafe extern "C" fn greener_reporter_delete(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn greener_reporter_session_create(
     reporter: *mut Reporter,
+    session_id: *const c_char,
+    description: *const c_char,
+    baggage: *const c_char,
+    labels: *const c_char,
     error: *mut *const GreenerReporterError,
 ) -> *const GreenerReporterSession {
     unsafe {
@@ -120,10 +152,79 @@ pub unsafe extern "C" fn greener_reporter_session_create(
 
     let reporter = unsafe { &*reporter };
 
-    match reporter.create_session() {
-        Ok(session_id) => {
+    let session_id_opt = if !session_id.is_null() {
+        Some(
+            unsafe { CStr::from_ptr(session_id) }
+                .to_string_lossy()
+                .to_string(),
+        )
+    } else {
+        None
+    };
+
+    let description_opt = if !description.is_null() {
+        Some(
+            unsafe { CStr::from_ptr(description) }
+                .to_string_lossy()
+                .to_string(),
+        )
+    } else {
+        None
+    };
+
+    let baggage_opt = if !baggage.is_null() {
+        let baggage_str = unsafe { CStr::from_ptr(baggage) }
+            .to_string_lossy()
+            .to_string();
+        match serde_json::from_str(&baggage_str) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                set_error(
+                    ReporterError::InvalidArgument(format!("cannot parse baggage: {}", e)),
+                    error,
+                );
+                return ptr::null();
+            }
+        }
+    } else {
+        None
+    };
+
+    let labels_opt = if !labels.is_null() {
+        let labels_str = unsafe { CStr::from_ptr(labels) }
+            .to_string_lossy()
+            .to_string();
+        let parsed_labels: Vec<Label> = labels_str
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                let parts: Vec<&str> = s.split('=').collect();
+                Label {
+                    key: parts[0].to_string(),
+                    value: parts.get(1).map(|v| v.to_string()),
+                }
+            })
+            .collect();
+        if parsed_labels.is_empty() {
+            None
+        } else {
+            Some(parsed_labels)
+        }
+    } else {
+        None
+    };
+
+    let session = SessionRequest {
+        id: session_id_opt,
+        description: description_opt,
+        baggage: baggage_opt,
+        labels: labels_opt,
+    };
+
+    match reporter.create_session(session) {
+        Ok(created_session_id) => {
             let session = Box::new(GreenerReporterSession {
-                id: CString::new(session_id).unwrap().into_raw(),
+                id: CString::new(created_session_id).unwrap().into_raw(),
             });
             Box::into_raw(session)
         }
@@ -232,7 +333,7 @@ pub unsafe extern "C" fn greener_reporter_testcase_create(
     {
         "pass" => TestcaseStatus::Pass,
         "fail" => TestcaseStatus::Fail,
-        "err" => TestcaseStatus::Err,
+        "error" => TestcaseStatus::Error,
         "skip" => TestcaseStatus::Skip,
         x => {
             set_error(

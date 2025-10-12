@@ -3,7 +3,6 @@ package ffi_test
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 
 	ffi "github.com/cephei8/greener-reporter/tests-ffi-go"
@@ -70,16 +69,10 @@ func processFixture(t *testing.T, fixtureName string) {
 		t.Fatal(err)
 	}
 
-	os.Unsetenv("GREENER_INGRESS_ENDPOINT")
-	os.Unsetenv("GREENER_INGRESS_API_KEY")
-	os.Unsetenv("GREENER_DEVSETTINGS_GRPC_CHANNEL_TYPE")
-	os.Setenv("GREENER_INGRESS_ENDPOINT", fmt.Sprintf("http://127.0.0.1:%d", port))
-	os.Setenv("GREENER_INGRESS_API_KEY", "some-api-token")
-	defer os.Unsetenv("GREENER_INGRESS_ENDPOINT")
-	defer os.Unsetenv("GREENER_INGRESS_API_KEY")
-	defer os.Unsetenv("GREENER_DEVSETTINGS_GRPC_CHANNEL_TYPE")
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d", port)
+	apiKey := "some-api-token"
 
-	a, reporterErr := ffi.NewGreenerReporter()
+	a, reporterErr := ffi.NewGreenerReporter(endpoint, apiKey)
 	if reporterErr != nil {
 		t.Fatal(reporterErr)
 	}
@@ -144,44 +137,42 @@ func makeCall(t *testing.T, a *ffi.GreenerReporter, c any, resps string) {
 			t.Fatal("status is not a string")
 		}
 
-		os.Unsetenv("GREENER_SESSION_ID")
-		os.Unsetenv("GREENER_SESSION_DESCRIPTION")
-		os.Unsetenv("GREENER_SESSION_BAGGAGE")
-		os.Unsetenv("GREENER_SESSION_LABELS")
+		var sessionId *string
+		var description *string
+		var baggage *string
+		var labels *string
+
 		if id, exists := cPayload["id"]; exists && id != nil {
 			if idStr, ok := id.(string); ok {
-				os.Setenv("GREENER_SESSION_ID", idStr)
+				sessionId = &idStr
 			} else {
 				t.Fatal("id is not a string")
 			}
 		}
-		if description, exists := cPayload["description"]; exists && description != nil {
-			if descStr, ok := description.(string); ok {
-				os.Setenv("GREENER_SESSION_DESCRIPTION", descStr)
+		if desc, exists := cPayload["description"]; exists && desc != nil {
+			if descStr, ok := desc.(string); ok {
+				description = &descStr
 			} else {
 				t.Fatal("description is not a string")
 			}
 		}
-		if baggage, exists := cPayload["baggage"]; exists && baggage != nil {
-			baggageBytes, err := json.Marshal(baggage)
+		if bag, exists := cPayload["baggage"]; exists && bag != nil {
+			baggageBytes, err := json.Marshal(bag)
 			if err != nil {
 				t.Fatal(err)
 			}
-			os.Setenv("GREENER_SESSION_BAGGAGE", string(baggageBytes))
+			baggageStr := string(baggageBytes)
+			baggage = &baggageStr
 		}
-		if labels, exists := cPayload["labels"]; exists && labels != nil {
-			if labelsStr, ok := labels.(string); ok {
-				os.Setenv("GREENER_SESSION_LABELS", labelsStr)
+		if lab, exists := cPayload["labels"]; exists && lab != nil {
+			if labelsStr, ok := lab.(string); ok {
+				labels = &labelsStr
 			} else {
 				t.Fatal("labels is not a string")
 			}
 		}
-		defer os.Unsetenv("GREENER_SESSION_ID")
-		defer os.Unsetenv("GREENER_SESSION_DESCRIPTION")
-		defer os.Unsetenv("GREENER_SESSION_BAGGAGE")
-		defer os.Unsetenv("GREENER_SESSION_LABELS")
 
-		se, err := a.CreateSession()
+		se, err := a.CreateSession(sessionId, description, baggage, labels)
 		defer func() {
 			if err == nil {
 				se.Delete()

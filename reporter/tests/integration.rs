@@ -1,10 +1,10 @@
 use greener_reporter::{
-    Reporter, ReporterError, TestcaseRequest, TestcaseStatus, GREENER_REPORTER_ERROR,
-    GREENER_REPORTER_ERROR_INGRESS, GREENER_REPORTER_ERROR_INVALID_ARGUMENT,
+    Label, Reporter, ReporterError, SessionRequest, TestcaseRequest, TestcaseStatus,
+    GREENER_REPORTER_ERROR, GREENER_REPORTER_ERROR_INGRESS,
+    GREENER_REPORTER_ERROR_INVALID_ARGUMENT,
 };
 use greener_servermock::GreenerServermock;
 use serde_json::Value;
-use std::env;
 
 fn get_fixture_names() -> Vec<String> {
     let mut servermock = GreenerServermock::new();
@@ -28,17 +28,10 @@ fn process_fixture(fixture_name: &str) {
         .expect("failed to serve responses");
     let port = servermock.port();
 
-    unsafe {
-        env::remove_var("GREENER_INGRESS_ENDPOINT");
-        env::remove_var("GREENER_INGRESS_API_KEY");
-        env::set_var(
-            "GREENER_INGRESS_ENDPOINT",
-            format!("http://127.0.0.1:{}", port),
-        );
-        env::set_var("GREENER_INGRESS_API_KEY", "some-api-token");
-    }
+    let endpoint = format!("http://127.0.0.1:{}", port);
+    let api_key = "some-api-token".to_string();
 
-    let reporter = Reporter::new().expect("failed to create reporter");
+    let reporter = Reporter::new(endpoint, api_key).expect("failed to create reporter");
     let calls_json: serde_json::Value =
         serde_json::from_str(&calls).expect("failed to parse calls JSON");
     let responses_json: serde_json::Value =
@@ -72,42 +65,53 @@ fn make_call(reporter: &Reporter, call: &Value, responses: &Value) {
             let r = &responses["createSessionResponse"];
             let r_status = r["status"].as_str().unwrap_or("");
 
-            unsafe {
-                env::remove_var("GREENER_SESSION_ID");
-                env::remove_var("GREENER_SESSION_DESCRIPTION");
-                env::remove_var("GREENER_SESSION_BAGGAGE");
-                env::remove_var("GREENER_SESSION_LABELS");
-            }
-            if !c_payload["id"].is_null() {
-                unsafe {
-                    env::set_var("GREENER_SESSION_ID", c_payload["id"].as_str().unwrap());
-                }
-            }
-            if !c_payload["description"].is_null() {
-                unsafe {
-                    env::set_var(
-                        "GREENER_SESSION_DESCRIPTION",
-                        c_payload["description"].as_str().unwrap(),
-                    );
-                }
-            }
-            if !c_payload["baggage"].is_null() {
-                let baggage_str = serde_json::to_string(c_payload["baggage"].as_object().unwrap())
-                    .expect("Failed to serialize baggage");
-                unsafe {
-                    env::set_var("GREENER_SESSION_BAGGAGE", baggage_str);
-                }
-            }
-            if !c_payload["labels"].is_null() {
-                unsafe {
-                    env::set_var(
-                        "GREENER_SESSION_LABELS",
-                        c_payload["labels"].as_str().unwrap(),
-                    );
-                }
-            }
+            let session_id = if !c_payload["id"].is_null() {
+                c_payload["id"].as_str().map(|s| s.to_string())
+            } else {
+                None
+            };
 
-            let result = reporter.create_session();
+            let description = if !c_payload["description"].is_null() {
+                c_payload["description"].as_str().map(|s| s.to_string())
+            } else {
+                None
+            };
+
+            let baggage = if !c_payload["baggage"].is_null() {
+                Some(c_payload["baggage"].clone())
+            } else {
+                None
+            };
+
+            let labels = if !c_payload["labels"].is_null() {
+                if let Some(labels_str) = c_payload["labels"].as_str() {
+                    let parsed_labels: Vec<Label> = labels_str
+                        .split(',')
+                        .filter(|s| !s.is_empty())
+                        .map(|s| {
+                            let parts: Vec<&str> = s.split('=').collect();
+                            Label {
+                                key: parts[0].to_string(),
+                                value: parts.get(1).map(|v| v.to_string()),
+                            }
+                        })
+                        .collect();
+                    Some(parsed_labels)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let session_request = SessionRequest {
+                id: session_id,
+                description,
+                baggage,
+                labels,
+            };
+
+            let result = reporter.create_session(session_request);
             if r_status == "success" {
                 match result {
                     Ok(session_id) => {
@@ -174,7 +178,7 @@ fn make_call(reporter: &Reporter, call: &Value, responses: &Value) {
                     status: match tc["status"].as_str().unwrap_or("") {
                         "pass" => TestcaseStatus::Pass,
                         "fail" => TestcaseStatus::Fail,
-                        "err" => TestcaseStatus::Err,
+                        "error" => TestcaseStatus::Error,
                         "skip" => TestcaseStatus::Skip,
                         _ => TestcaseStatus::Pass,
                     },

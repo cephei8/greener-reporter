@@ -10,7 +10,8 @@ struct greener_reporter_session;
 struct greener_reporter_error;
 
 struct greener_reporter *
-greener_reporter_new(const struct greener_reporter_error **error);
+greener_reporter_new(const char *endpoint, const char *api_key,
+                     const struct greener_reporter_error **error);
 
 void greener_reporter_delete(struct greener_reporter *reporter,
                              const struct greener_reporter_error **error);
@@ -21,6 +22,9 @@ void greener_reporter_report_error_pop(
 
 const struct greener_reporter_session *
 greener_reporter_session_create(struct greener_reporter *reporter,
+                                const char *session_id,
+                                const char *description, const char *baggage,
+                                const char *labels,
                                 const struct greener_reporter_error **error);
 
 void greener_reporter_testcase_create(
