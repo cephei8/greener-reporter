@@ -54,9 +54,14 @@ type GreenerReporter struct {
 	h *C.struct_greener_reporter
 }
 
-func NewGreenerReporter() (*GreenerReporter, *GreenerReporterError) {
+func NewGreenerReporter(endpoint string, apiKey string) (*GreenerReporter, *GreenerReporterError) {
 	var errC *C.struct_greener_reporter_error
-	h := C.greener_reporter_new(&errC)
+	endpointC := C.CString(endpoint)
+	apiKeyC := C.CString(apiKey)
+	defer C.free(unsafe.Pointer(endpointC))
+	defer C.free(unsafe.Pointer(apiKeyC))
+
+	h := C.greener_reporter_new(endpointC, apiKeyC, &errC)
 	if errC != nil {
 		return nil, &GreenerReporterError{h: errC}
 	}
@@ -106,9 +111,32 @@ func (s *GreenerReporterSession) Id() string {
 	return C.GoString(s.h.id)
 }
 
-func (a *GreenerReporter) CreateSession() (*GreenerReporterSession, *GreenerReporterError) {
+func (a *GreenerReporter) CreateSession(sessionId *string, description *string, baggage *string, labels *string) (*GreenerReporterSession, *GreenerReporterError) {
 	errC := (*C.struct_greener_reporter_error)(nil)
-	sessionC := C.greener_reporter_session_create(a.h, &errC)
+
+	sessionIdC := (*C.char)(nil)
+	descriptionC := (*C.char)(nil)
+	baggageC := (*C.char)(nil)
+	labelsC := (*C.char)(nil)
+
+	if sessionId != nil {
+		sessionIdC = C.CString(*sessionId)
+		defer C.free(unsafe.Pointer(sessionIdC))
+	}
+	if description != nil {
+		descriptionC = C.CString(*description)
+		defer C.free(unsafe.Pointer(descriptionC))
+	}
+	if baggage != nil {
+		baggageC = C.CString(*baggage)
+		defer C.free(unsafe.Pointer(baggageC))
+	}
+	if labels != nil {
+		labelsC = C.CString(*labels)
+		defer C.free(unsafe.Pointer(labelsC))
+	}
+
+	sessionC := C.greener_reporter_session_create(a.h, sessionIdC, descriptionC, baggageC, labelsC, &errC)
 	if errC != nil {
 		return nil, &GreenerReporterError{h: errC}
 	}

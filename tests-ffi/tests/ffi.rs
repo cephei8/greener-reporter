@@ -1,5 +1,4 @@
 use serde_json::Value;
-use std::env;
 use std::ffi::{CStr, CString};
 use std::ptr;
 use tests_ffi::*;
@@ -77,14 +76,16 @@ fn process_fixture(fixture_name: &str) {
             let msg = CStr::from_ptr((*error).message).to_string_lossy();
             panic!("failed to get port: {}", msg);
         }
-        env::set_var(
-            "GREENER_INGRESS_ENDPOINT",
-            format!("http://127.0.0.1:{}", port),
-        );
-        env::set_var("GREENER_INGRESS_API_KEY", "some-api-token");
+        let endpoint = format!("http://127.0.0.1:{}", port);
+        let endpoint_c = CString::new(endpoint).unwrap();
+        let api_key_c = CString::new("some-api-token").unwrap();
 
         let mut reporter_error: *const greener_reporter_error = ptr::null();
-        let reporter = greener_reporter_new(&mut reporter_error as *mut _);
+        let reporter = greener_reporter_new(
+            endpoint_c.as_ptr(),
+            api_key_c.as_ptr(),
+            &mut reporter_error as *mut _,
+        );
         if !reporter_error.is_null() {
             let msg = CStr::from_ptr((*reporter_error).message).to_string_lossy();
             panic!("failed to create reporter: {}", msg);
@@ -114,8 +115,6 @@ fn process_fixture(fixture_name: &str) {
             let msg = CStr::from_ptr((*assert_error).message).to_string_lossy();
             panic!("assert failed: {}", msg);
         }
-        env::remove_var("GREENER_INGRESS_ENDPOINT");
-        env::remove_var("GREENER_INGRESS_API_KEY");
     }
 }
 
@@ -130,28 +129,37 @@ fn make_call(reporter: *mut greener_reporter, call: &Value, responses: &str) {
                 let status = response["status"]
                     .as_str()
                     .expect("missing status in response");
-                env::remove_var("GREENER_SESSION_ID");
-                env::remove_var("GREENER_SESSION_DESCRIPTION");
-                env::remove_var("GREENER_SESSION_BAGGAGE");
-                env::remove_var("GREENER_SESSION_LABELS");
-                if let Some(id) = payload["id"].as_str() {
-                    env::set_var("GREENER_SESSION_ID", id);
-                }
-                if let Some(description) = payload["description"].as_str() {
-                    env::set_var("GREENER_SESSION_DESCRIPTION", description);
-                }
-                if !payload["baggage"].is_null() {
+
+                let session_id_c = payload["id"].as_str().map(|s| CString::new(s).unwrap());
+                let description_c = payload["description"]
+                    .as_str()
+                    .map(|s| CString::new(s).unwrap());
+                let baggage_c = if !payload["baggage"].is_null() {
                     let baggage_json = serde_json::to_string(&payload["baggage"]).unwrap();
-                    env::set_var("GREENER_SESSION_BAGGAGE", baggage_json);
-                }
-                if let Some(labels) = payload["labels"].as_str() {
-                    env::set_var("GREENER_SESSION_LABELS", labels);
-                }
+                    Some(CString::new(baggage_json).unwrap())
+                } else {
+                    None
+                };
+                let labels_c = payload["labels"].as_str().map(|s| CString::new(s).unwrap());
+
+                let session_id_ptr = session_id_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
+                let description_ptr = description_c
+                    .as_ref()
+                    .map_or(ptr::null(), |c| c.as_ptr());
+                let baggage_ptr = baggage_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
+                let labels_ptr = labels_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
+
                 match status {
                     "success" => {
                         let mut error: *const greener_reporter_error = ptr::null();
-                        let session =
-                            greener_reporter_session_create(reporter, &mut error as *mut _);
+                        let session = greener_reporter_session_create(
+                            reporter,
+                            session_id_ptr,
+                            description_ptr,
+                            baggage_ptr,
+                            labels_ptr,
+                            &mut error as *mut _,
+                        );
                         if !error.is_null() {
                             let msg = CStr::from_ptr((*error).message).to_string_lossy();
                             panic!("failed to create session: {}", msg);
@@ -170,8 +178,14 @@ fn make_call(reporter: *mut greener_reporter, call: &Value, responses: &str) {
                     }
                     "error" => {
                         let mut error: *const greener_reporter_error = ptr::null();
-                        let _session =
-                            greener_reporter_session_create(reporter, &mut error as *mut _);
+                        let _session = greener_reporter_session_create(
+                            reporter,
+                            session_id_ptr,
+                            description_ptr,
+                            baggage_ptr,
+                            labels_ptr,
+                            &mut error as *mut _,
+                        );
                         if error.is_null() {
                             panic!("session creation succeeded, should've failed");
                         }
@@ -187,10 +201,6 @@ fn make_call(reporter: *mut greener_reporter, call: &Value, responses: &str) {
                     }
                     _ => panic!("unknown response status: {}", status),
                 }
-                env::remove_var("GREENER_SESSION_ID");
-                env::remove_var("GREENER_SESSION_DESCRIPTION");
-                env::remove_var("GREENER_SESSION_BAGGAGE");
-                env::remove_var("GREENER_SESSION_LABELS");
             }
             "report" => {
                 let responses_json: Value = serde_json::from_str(responses).unwrap();

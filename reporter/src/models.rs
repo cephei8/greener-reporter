@@ -7,7 +7,7 @@ use std::fmt;
 pub enum TestcaseStatus {
     Pass,
     Fail,
-    Err,
+    Error,
     Skip,
 }
 
@@ -16,7 +16,7 @@ impl fmt::Display for TestcaseStatus {
         match self {
             TestcaseStatus::Pass => write!(f, "pass"),
             TestcaseStatus::Fail => write!(f, "fail"),
-            TestcaseStatus::Err => write!(f, "error"),
+            TestcaseStatus::Error => write!(f, "error"),
             TestcaseStatus::Skip => write!(f, "skip"),
         }
     }

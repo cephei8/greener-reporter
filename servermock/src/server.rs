@@ -45,8 +45,8 @@ pub fn start_server(
     })?;
 
     let app = Router::new()
-        .route("/ingress/sessions", post(create_session))
-        .route("/ingress/testcases", post(create_testcases))
+        .route("/api/v1/ingress/sessions", post(create_session))
+        .route("/api/v1/ingress/testcases", post(create_testcases))
         .with_state(shared_state);
 
     runtime.spawn(async move {

@@ -182,7 +182,7 @@ func createTestcase(ctx context.Context, cmd *cli.Command) error {
 		testcaseStatus = StatusPass
 	case "fail":
 		testcaseStatus = StatusFail
-	case "err":
+	case "error":
 		testcaseStatus = StatusErr
 	case "skip":
 		testcaseStatus = StatusSkip
