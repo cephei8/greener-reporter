@@ -53,6 +53,11 @@ jobs:
 
       - run: cargo test --release
 
+      - run: go build
+        working-directory: tests-ffi-go
+      - run: go test
+        working-directory: tests-ffi-go
+        
       - name: Create release tar directories
         run: |
           mkdir -p release_tar/reporter
