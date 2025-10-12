@@ -20,14 +20,6 @@ updates:
     directory: "/tests-ffi"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "gomod"
-    directory: "/tests-ffi-go"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "gomod"
-    directory: "/util/greener-reporter-cli"
-    schedule:
-      interval: "weekly"
 
   - package-ecosystem: "github-actions"
     directory: "/"
