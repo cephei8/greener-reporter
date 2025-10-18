@@ -52,12 +52,6 @@ pub struct ErrorResponse {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct TestcaseBatchRequest {
-    pub testcases: Vec<TestcaseRequest>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct TestcaseRequest {
     pub session_id: String,
     pub testcase_name: String,
