@@ -1,17 +1,16 @@
 package ffi
 
 /*
+#cgo CFLAGS: -I../reporter-ffi/include -I../servermock-ffi/include
+#cgo linux LDFLAGS: -L../reporter-ffi -L../servermock-ffi -lgreener_reporter -lgreener_servermock -Wl,-rpath,../reporter-ffi -Wl,-rpath,../servermock-ffi
+#cgo darwin LDFLAGS: -L../reporter-ffi -L../servermock-ffi -lgreener_reporter -lgreener_servermock -Wl,-rpath,../reporter-ffi -Wl,-rpath,../servermock-ffi
+#cgo windows LDFLAGS: -L../reporter-ffi -L../servermock-ffi -lgreener_reporter -lgreener_servermock
 
-#cgo CFLAGS: -I../dist/include
-#cgo linux LDFLAGS: -L../target/debug -lgreener_reporter -lgreener_servermock -Wl,-rpath,../target/debug
-#cgo darwin LDFLAGS: -L../target/debug -lgreener_reporter -lgreener_servermock -Wl,-rpath,../target/debug
-#cgo windows LDFLAGS: -L../target/debug -lgreener_reporter -lgreener_servermock
+#include <stdlib.h>
+#include <stdint.h>
 
 #include <greener_reporter/greener_reporter.h>
 #include <greener_servermock/greener_servermock.h>
-
-#include <stdlib.h>
-
 */
 import "C"
 import (
@@ -51,7 +50,7 @@ func GetFixtureNames() ([]string, error) {
 }
 
 type GreenerReporter struct {
-	h *C.struct_greener_reporter
+	h C.uintptr_t
 }
 
 func NewGreenerReporter(endpoint string, apiKey string) (*GreenerReporter, *GreenerReporterError) {
@@ -74,7 +73,7 @@ func (a *GreenerReporter) Delete() *GreenerReporterError {
 	if errC != nil {
 		return &GreenerReporterError{h: errC}
 	}
-	a.h = nil
+	a.h = 0
 
 	return nil
 }
@@ -153,6 +152,15 @@ func (a *GreenerReporter) CreateTestcase(
 	baggage *string,
 
 ) *GreenerReporterError {
+	sessionIdC := C.CString(sessionId)
+	defer C.free(unsafe.Pointer(sessionIdC))
+
+	testcaseNameC := C.CString(testcaseName)
+	defer C.free(unsafe.Pointer(testcaseNameC))
+
+	statusC := C.CString(status)
+	defer C.free(unsafe.Pointer(statusC))
+
 	testcaseClassnameC := (*C.char)(nil)
 	testcaseFileC := (*C.char)(nil)
 	testsuiteC := (*C.char)(nil)
@@ -160,26 +168,30 @@ func (a *GreenerReporter) CreateTestcase(
 
 	if testcaseClassname != nil {
 		testcaseClassnameC = C.CString(*testcaseClassname)
+		defer C.free(unsafe.Pointer(testcaseClassnameC))
 	}
 	if testcaseFile != nil {
 		testcaseFileC = C.CString(*testcaseFile)
+		defer C.free(unsafe.Pointer(testcaseFileC))
 	}
 	if testsuite != nil {
 		testsuiteC = C.CString(*testsuite)
+		defer C.free(unsafe.Pointer(testsuiteC))
 	}
 	if baggage != nil {
 		baggageC = C.CString(*baggage)
+		defer C.free(unsafe.Pointer(baggageC))
 	}
 
 	errC := (*C.struct_greener_reporter_error)(nil)
 	C.greener_reporter_testcase_create(
 		a.h,
-		C.CString(sessionId),
-		C.CString(testcaseName),
+		sessionIdC,
+		testcaseNameC,
 		testcaseClassnameC,
 		testcaseFileC,
 		testsuiteC,
-		C.CString(status),
+		statusC,
 		nil, // stdout
 		baggageC,
 		&errC,
@@ -191,7 +203,7 @@ func (a *GreenerReporter) CreateTestcase(
 }
 
 type GreenerServermock struct {
-	h *C.struct_greener_servermock
+	h C.uintptr_t
 }
 
 func NewGreenerServermock() *GreenerServermock {
@@ -206,7 +218,7 @@ func (s *GreenerServermock) Delete() error {
 	if errC != nil {
 		return fmt.Errorf("cannot delete servermock: %s", C.GoString(errC.message))
 	}
-	s.h = nil
+	s.h = 0
 
 	return nil
 }
@@ -214,7 +226,10 @@ func (s *GreenerServermock) Delete() error {
 func (s *GreenerServermock) FixtureCalls(name string) (string, error) {
 	callsC := (*C.char)(nil)
 	errC := (*C.struct_greener_servermock_error)(nil)
-	C.greener_servermock_fixture_calls(s.h, C.CString(name), &callsC, &errC)
+	nameC := C.CString(name)
+	defer C.free(unsafe.Pointer(nameC))
+
+	C.greener_servermock_fixture_calls(s.h, nameC, &callsC, &errC)
 	if errC != nil {
 		return "", fmt.Errorf("cannot get servermock fixture calls: %s", C.GoString(errC.message))
 	}
@@ -226,7 +241,10 @@ func (s *GreenerServermock) FixtureCalls(name string) (string, error) {
 func (s *GreenerServermock) FixtureResponses(name string) (string, error) {
 	respsC := (*C.char)(nil)
 	errC := (*C.struct_greener_servermock_error)(nil)
-	C.greener_servermock_fixture_responses(s.h, C.CString(name), &respsC, &errC)
+	nameC := C.CString(name)
+	defer C.free(unsafe.Pointer(nameC))
+
+	C.greener_servermock_fixture_responses(s.h, nameC, &respsC, &errC)
 	if errC != nil {
 		return "", fmt.Errorf("cannot get servermock fixture responses: %s", C.GoString(errC.message))
 	}
@@ -237,7 +255,10 @@ func (s *GreenerServermock) FixtureResponses(name string) (string, error) {
 
 func (s *GreenerServermock) Serve(resps string) error {
 	errC := (*C.struct_greener_servermock_error)(nil)
-	C.greener_servermock_serve(s.h, C.CString(resps), &errC)
+	respsC := C.CString(resps)
+	defer C.free(unsafe.Pointer(respsC))
+
+	C.greener_servermock_serve(s.h, respsC, &errC)
 	if errC != nil {
 		return fmt.Errorf("cannot servermock serve: %s", C.GoString(errC.message))
 	}
@@ -256,7 +277,10 @@ func (s *GreenerServermock) GetPort() (int, error) {
 
 func (s *GreenerServermock) Assert(calls string) error {
 	errC := (*C.struct_greener_servermock_error)(nil)
-	C.greener_servermock_assert(s.h, C.CString(calls), &errC)
+	callsC := C.CString(calls)
+	defer C.free(unsafe.Pointer(callsC))
+
+	C.greener_servermock_assert(s.h, callsC, &errC)
 	if errC != nil {
 		return fmt.Errorf("servermock assert failed: %s", C.GoString(errC.message))
 	}

@@ -1,0 +1,9 @@
+go 1.25.2
+
+use (
+	./reporter
+	./reporter-ffi
+	./servermock
+	./servermock-ffi
+	./tests-ffi
+)

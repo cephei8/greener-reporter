@@ -1,5 +1,5 @@
 [package]
-name = "tests-ffi"
+name = "tests-ffi-rs"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,5 +10,5 @@ serde_json = "1.0"
 bindgen = "0.72"
 
 [lib]
-name = "tests_ffi"
+name = "tests_ffi_rs"
 crate-type = ["lib"]

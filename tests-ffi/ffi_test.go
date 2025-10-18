@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	ffi "github.com/cephei8/greener-reporter/tests-ffi-go"
+	ffi "github.com/cephei8/greener-reporter/tests-ffi"
 )
 
 func getFixtureNames(t *testing.T) []string {

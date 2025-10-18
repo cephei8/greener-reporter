@@ -1,15 +1,20 @@
 use serde_json::Value;
 use std::ffi::{CStr, CString};
 use std::ptr;
-use tests_ffi::*;
+use tests_ffi_rs::*;
 
 fn get_fixture_names_list() -> Vec<String> {
     unsafe {
         let servermock = greener_servermock_new();
-        let mut names: *mut *const ::std::os::raw::c_char = ptr::null_mut();
+        let mut names: *mut *mut ::std::os::raw::c_char = ptr::null_mut();
         let mut num_names: u32 = 0;
-        let mut error: *const greener_servermock_error = ptr::null();
-        greener_servermock_fixture_names(servermock, &mut names, &mut num_names, &mut error);
+        let mut error: *mut greener_servermock_error = ptr::null_mut();
+        greener_servermock_fixture_names(
+            servermock,
+            &mut names as *mut *mut *mut _,
+            &mut num_names,
+            &mut error,
+        );
         if !error.is_null() {
             let msg = CStr::from_ptr((*error).message).to_string_lossy();
             panic!("failed to get fixture names: {}", msg);
@@ -48,17 +53,22 @@ fn process_fixture(fixture_name: &str) {
     unsafe {
         let servermock = greener_servermock_new();
         let name_c = CString::new(fixture_name).unwrap();
-        let mut calls: *const ::std::os::raw::c_char = ptr::null();
-        let mut responses: *const ::std::os::raw::c_char = ptr::null();
-        let mut error: *const greener_servermock_error = ptr::null();
-        greener_servermock_fixture_calls(servermock, name_c.as_ptr(), &mut calls, &mut error);
+        let mut calls: *mut ::std::os::raw::c_char = ptr::null_mut();
+        let mut responses: *mut ::std::os::raw::c_char = ptr::null_mut();
+        let mut error: *mut greener_servermock_error = ptr::null_mut();
+        greener_servermock_fixture_calls(
+            servermock,
+            name_c.as_ptr() as *mut _,
+            &mut calls,
+            &mut error,
+        );
         if !error.is_null() {
             let msg = CStr::from_ptr((*error).message).to_string_lossy();
             panic!("failed to get fixture calls: {}", msg);
         }
         greener_servermock_fixture_responses(
             servermock,
-            name_c.as_ptr(),
+            name_c.as_ptr() as *mut _,
             &mut responses,
             &mut error,
         );
@@ -80,10 +90,10 @@ fn process_fixture(fixture_name: &str) {
         let endpoint_c = CString::new(endpoint).unwrap();
         let api_key_c = CString::new("some-api-token").unwrap();
 
-        let mut reporter_error: *const greener_reporter_error = ptr::null();
+        let mut reporter_error: *mut greener_reporter_error = ptr::null_mut();
         let reporter = greener_reporter_new(
-            endpoint_c.as_ptr(),
-            api_key_c.as_ptr(),
+            endpoint_c.as_ptr() as *mut _,
+            api_key_c.as_ptr() as *mut _,
             &mut reporter_error as *mut _,
         );
         if !reporter_error.is_null() {
@@ -99,17 +109,17 @@ fn process_fixture(fixture_name: &str) {
         for call in calls_array {
             make_call(reporter, call, &responses_str);
         }
-        let mut del_error: *const greener_reporter_error = ptr::null();
+        let mut del_error: *mut greener_reporter_error = ptr::null_mut();
         greener_reporter_delete(reporter, &mut del_error as *mut _);
         if !del_error.is_null() {
             let msg = CStr::from_ptr((*del_error).message).to_string_lossy();
             panic!("failed to delete reporter: {}", msg);
         }
-        let mut assert_error: *const greener_servermock_error = ptr::null();
+        let mut assert_error: *mut greener_servermock_error = ptr::null_mut();
         greener_servermock_assert(
             servermock,
             calls,
-            &mut assert_error as *mut *const greener_servermock_error,
+            &mut assert_error as *mut *mut greener_servermock_error,
         );
         if !assert_error.is_null() {
             let msg = CStr::from_ptr((*assert_error).message).to_string_lossy();
@@ -118,7 +128,7 @@ fn process_fixture(fixture_name: &str) {
     }
 }
 
-fn make_call(reporter: *mut greener_reporter, call: &Value, responses: &str) {
+fn make_call(reporter: usize, call: &Value, responses: &str) {
     unsafe {
         let func = call["func"].as_str().expect("missing 'func' in call");
         let payload = &call["payload"];
@@ -143,21 +153,19 @@ fn make_call(reporter: *mut greener_reporter, call: &Value, responses: &str) {
                 let labels_c = payload["labels"].as_str().map(|s| CString::new(s).unwrap());
 
                 let session_id_ptr = session_id_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
-                let description_ptr = description_c
-                    .as_ref()
-                    .map_or(ptr::null(), |c| c.as_ptr());
+                let description_ptr = description_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
                 let baggage_ptr = baggage_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
                 let labels_ptr = labels_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
 
                 match status {
                     "success" => {
-                        let mut error: *const greener_reporter_error = ptr::null();
+                        let mut error: *mut greener_reporter_error = ptr::null_mut();
                         let session = greener_reporter_session_create(
                             reporter,
-                            session_id_ptr,
-                            description_ptr,
-                            baggage_ptr,
-                            labels_ptr,
+                            session_id_ptr as *mut _,
+                            description_ptr as *mut _,
+                            baggage_ptr as *mut _,
+                            labels_ptr as *mut _,
                             &mut error as *mut _,
                         );
                         if !error.is_null() {
@@ -177,13 +185,13 @@ fn make_call(reporter: *mut greener_reporter, call: &Value, responses: &str) {
                         greener_reporter_session_delete(session);
                     }
                     "error" => {
-                        let mut error: *const greener_reporter_error = ptr::null();
+                        let mut error: *mut greener_reporter_error = ptr::null_mut();
                         let _session = greener_reporter_session_create(
                             reporter,
-                            session_id_ptr,
-                            description_ptr,
-                            baggage_ptr,
-                            labels_ptr,
+                            session_id_ptr as *mut _,
+                            description_ptr as *mut _,
+                            baggage_ptr as *mut _,
+                            labels_ptr as *mut _,
                             &mut error as *mut _,
                         );
                         if error.is_null() {
@@ -241,17 +249,17 @@ fn make_call(reporter: *mut greener_reporter, call: &Value, responses: &str) {
                         testsuite_ptr = cstr.as_ptr();
                     }
 
-                    let mut error: *const greener_reporter_error = ptr::null();
+                    let mut error: *mut greener_reporter_error = ptr::null_mut();
                     greener_reporter_testcase_create(
                         reporter,
-                        session_id_c.as_ptr(),
-                        testcase_name_c.as_ptr(),
-                        testcase_classname_ptr,
-                        testcase_file_ptr,
-                        testsuite_ptr,
-                        status_c.as_ptr(),
-                        ptr::null(),
-                        ptr::null(),
+                        session_id_c.as_ptr() as *mut _,
+                        testcase_name_c.as_ptr() as *mut _,
+                        testcase_classname_ptr as *mut _,
+                        testcase_file_ptr as *mut _,
+                        testsuite_ptr as *mut _,
+                        status_c.as_ptr() as *mut _,
+                        ptr::null_mut(),
+                        ptr::null_mut(),
                         &mut error as *mut _,
                     );
 

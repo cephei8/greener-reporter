@@ -1,0 +1,7 @@
+/reporter-ffi
+/include
+/*.h
+/*.so
+/*.dylib
+/*.dll
+/*.lib

@@ -1,22 +1,26 @@
 version: 2
 updates:
-  - package-ecosystem: "cargo"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "cargo"
+  - package-ecosystem: "gomod"
     directory: "/reporter"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "cargo"
+  - package-ecosystem: "gomod"
     directory: "/reporter-cli"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "cargo"
+  - package-ecosystem: "gomod"
+    directory: "/reporter-ffi"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "gomod"
     directory: "/servermock"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "cargo"
+  - package-ecosystem: "gomod"
+    directory: "/servermock-ffi"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "gomod"
     directory: "/tests-ffi"
     schedule:
       interval: "weekly"
