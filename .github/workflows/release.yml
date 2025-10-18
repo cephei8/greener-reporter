@@ -15,51 +15,26 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
+            target_name: "linux-x64"
+          - os: ubuntu-24.04-arm
+            target_name: "linux-arm64"
           - os: windows-latest
             target_name: "win-x64"
-          - os: macos-13
+          - os: macos-15-intel
             target_name: "mac-x64"
-          - os: macos-14
+          - os: macos-15
             target_name: "mac-arm64"
     defaults:
       run:
         shell: bash
 
     steps:
-      - if: matrix.target_name == 'mac-x64'
-        name: Verify hardware platform
-        run: if [[ $(uname -m | tr -d '[:space:]') != "x86_64" ]]; then exit 1; fi
-
-      - if: matrix.target_name == 'mac-arm64'
-        name: Verify hardware platform
-        run: if [[ $(uname -m | tr -d '[:space:]') != "arm64" ]]; then exit 1; fi
-
       - uses: actions/checkout@v5
 
-      - if: runner.os == 'Linux'
-        name: Install cross-compilation tools
+      - name: Build
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-          rustup target add x86_64-unknown-linux-gnu
-          rustup target add aarch64-unknown-linux-gnu
-
-      - if: runner.os == 'Linux'
-        name: Build x64
-        run: |
-          cargo build --release --target x86_64-unknown-linux-gnu
-
-      - if: runner.os == 'Linux'
-        name: Build arm64
-        run: |
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
-          cargo build --release --target aarch64-unknown-linux-gnu
-
-      - if: runner.os != 'Linux'
-        name: Build
-        run: cargo build --release
+          cargo build --release
 
       - if: runner.os == 'macOS'
         name: Fix rpath for libs
@@ -76,24 +51,7 @@ jobs:
       - name: Run tests
         run: cargo test --release
 
-      - if: runner.os == 'Linux'
-        name: Create release tar directories
-        run: |
-          mkdir -p release_tar/linux-x64/reporter
-          mkdir -p release_tar/linux-x64/servermock
-          mkdir -p release_tar/linux-arm64/reporter
-          mkdir -p release_tar/linux-arm64/servermock
-
-          # x64
-          cp target/x86_64-unknown-linux-gnu/release/libgreener_reporter.so release_tar/linux-x64/reporter/
-          cp target/x86_64-unknown-linux-gnu/release/libgreener_servermock.so release_tar/linux-x64/servermock/
-
-          # arm64
-          cp target/aarch64-unknown-linux-gnu/release/libgreener_reporter.so release_tar/linux-arm64/reporter/
-          cp target/aarch64-unknown-linux-gnu/release/libgreener_servermock.so release_tar/linux-arm64/servermock/
-
-      - if: runner.os != 'Linux'
-        name: Create release tar directories
+      - name: Create release tar directories
         run: |
           mkdir -p release_tar/reporter
           mkdir -p release_tar/servermock
@@ -113,42 +71,24 @@ jobs:
           cp target/release/libgreener_servermock.dylib release_tar/servermock
 
       - if: runner.os == 'Linux'
-        name: Create release tars
+        name: Prepare release tar directories
         run: |
-          tar -czf greener-reporter-lib-linux-x64.tar.gz -C release_tar/linux-x64/reporter .
-          tar -czf greener-servermock-lib-linux-x64.tar.gz -C release_tar/linux-x64/servermock .
+          cp target/release/libgreener_reporter.so release_tar/reporter
+          cp target/release/libgreener_servermock.so release_tar/servermock
 
-          tar -czf greener-reporter-lib-linux-arm64.tar.gz -C release_tar/linux-arm64/reporter .
-          tar -czf greener-servermock-lib-linux-arm64.tar.gz -C release_tar/linux-arm64/servermock .
-
-      - if: runner.os != 'Linux'
-        name: Create release tars
+      - name: Create release tars
         run: |
           tar -czf greener-reporter-lib-${{ matrix.target_name }}.tar.gz -C release_tar/reporter .
           tar -czf greener-servermock-lib-${{ matrix.target_name }}.tar.gz -C release_tar/servermock .
 
-      - if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-libs
-          path: |
-            greener-reporter-lib-linux-x64.tar.gz
-            greener-servermock-lib-linux-x64.tar.gz
-            greener-reporter-lib-linux-arm64.tar.gz
-            greener-servermock-lib-linux-arm64.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-
-      - if: runner.os != 'Linux'
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
           path: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
           if-no-files-found: error
           retention-days: 1
 
-      - if: runner.os != 'Linux'
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
           path: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
