@@ -81,14 +81,14 @@ jobs:
           tar -czf greener-reporter-lib-${{ matrix.target_name }}.tar.gz -C release_tar/reporter .
           tar -czf greener-servermock-lib-${{ matrix.target_name }}.tar.gz -C release_tar/servermock .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
           path: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
           if-no-files-found: error
           retention-days: 1
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
           path: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
