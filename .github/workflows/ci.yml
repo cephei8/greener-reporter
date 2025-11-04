@@ -11,5 +11,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - run: cargo build --target x86_64-unknown-linux-gnu
-      - run: cargo test
+      - name: Build
+        run: |
+          docker build \
+            --build-arg PACKAGE="minimal" \
+            -t greener-reporter-zig:latest \
+            ./z
+
+      - name: Create output directory
+        run: mkdir -p ./z/zig-out/lib
+
+      - name: Copy to host
+        run: |
+          docker run --name zig-builder greener-reporter-zig:latest
+          docker cp zig-builder:/output/x86_64-linux-gnu/. ./z/zig-out/lib/
+
+      - name: Build Rust part
+        run: cargo build --target x86_64-unknown-linux-gnu
+
+      - name: Run tests
+        run: cargo test
