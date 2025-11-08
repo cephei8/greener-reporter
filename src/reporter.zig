@@ -14,7 +14,7 @@ pub const GREENER_REPORTER_ERROR: c_int = 1;
 pub const GREENER_REPORTER_ERROR_INVALID_ARGUMENT: c_int = 2;
 pub const GREENER_REPORTER_ERROR_INGRESS: c_int = 3;
 
-export fn greener_reporter_new(
+pub export fn greener_reporter_new(
     endpoint: ?[*:0]const u8,
     api_key: ?[*:0]const u8,
     err: *?*const greener_reporter_error,
@@ -37,7 +37,7 @@ export fn greener_reporter_new(
     return @ptrCast(reporter);
 }
 
-export fn greener_reporter_delete(
+pub export fn greener_reporter_delete(
     reporter: *greener_reporter,
     err: *?*const greener_reporter_error,
 ) void {
@@ -53,7 +53,7 @@ export fn greener_reporter_delete(
     alloc.destroy(r);
 }
 
-export fn greener_reporter_report_error_pop(
+pub export fn greener_reporter_report_error_pop(
     reporter: *greener_reporter,
     err: *?*const greener_reporter_error,
 ) void {
@@ -66,7 +66,7 @@ export fn greener_reporter_report_error_pop(
     }
 }
 
-export fn greener_reporter_session_create(
+pub export fn greener_reporter_session_create(
     reporter: *greener_reporter,
     session_id: ?[*:0]const u8,
     description: ?[*:0]const u8,
@@ -108,7 +108,7 @@ export fn greener_reporter_session_create(
     return session_res;
 }
 
-export fn greener_reporter_testcase_create(
+pub export fn greener_reporter_testcase_create(
     reporter: *greener_reporter,
     session_id: ?[*:0]const u8,
     testcase_name: ?[*:0]const u8,
@@ -148,7 +148,7 @@ export fn greener_reporter_testcase_create(
     };
 }
 
-export fn greener_reporter_session_delete(
+pub export fn greener_reporter_session_delete(
     session: *const greener_reporter_session,
 ) void {
     const alloc = std.heap.c_allocator;
@@ -157,7 +157,7 @@ export fn greener_reporter_session_delete(
     alloc.destroy(session);
 }
 
-export fn greener_reporter_error_delete(
+pub export fn greener_reporter_error_delete(
     err: *const greener_reporter_error,
 ) void {
     const alloc = std.heap.c_allocator;

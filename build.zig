@@ -16,11 +16,11 @@ pub fn build(b: *std.Build) void {
     //     .optimize = optimize,
     // });
 
-    // const cli_module = b.createModule(.{
-    //     .root_source_file = b.path("src/cli.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+    const cli_module = b.createModule(.{
+        .root_source_file = b.path("src/reporter_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const reporter = b.addLibrary(.{
         .name = "greener_reporter",
@@ -61,10 +61,10 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_tests.step);
 
-    // const cli = b.addExecutable(.{
-    //     .name = "reporter-cli",
-    //     .root_module = cli_module,
-    // });
-    // cli.linkLibrary(reporter_static);
-    // b.installArtifact(cli);
+    const cli = b.addExecutable(.{
+        .name = "reporter-cli",
+        .root_module = cli_module,
+    });
+    cli.linkLibrary(reporter_static);
+    b.installArtifact(cli);
 }

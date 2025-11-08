@@ -25,7 +25,7 @@ echo "Endpoint: $ENDPOINT"
 echo ""
 
 run_cli() {
-    ./target/debug/greener-reporter-cli --endpoint "$ENDPOINT" --api-key "$API_KEY" "$@"
+    ./zig-out/bin/reporter-cli --endpoint "$ENDPOINT" --api-key "$API_KEY" "$@"
 }
 
 VERSIONS=("1.0.0" "1.0.1" "1.1.0" "2.0.0" "2.1.0")
