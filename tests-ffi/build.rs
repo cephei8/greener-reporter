@@ -23,7 +23,6 @@ fn main() {
 
     let target_dir_zig = PathBuf::from(&manifest_dir)
         .join("..")
-        .join("z")
         .join("zig-out")
         .join("lib");
 

@@ -1,1 +1,7 @@
 /target
+
+/zig-out
+/.zig-cache
+
+/result
+/.direnv
