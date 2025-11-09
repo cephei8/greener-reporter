@@ -18,9 +18,27 @@ env:
   ZIG_TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu x86_64-macos aarch64-macos"
 
 jobs:
+  release_build_validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate pre-release tag format
+        if: inputs.prerelease == true
+        shell: bash
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          if ! echo "$TAG" | grep -qE -- '-(alpha|beta|rc|pre|preview|dev|nightly)'; then
+            echo "Error: Pre-release tag must contain a suffix like -alpha, -beta, -rc1, etc."
+            echo "  Examples: v1.0.0-beta, v2.0.0-rc1, v1.5.0-alpha.1"
+            echo "  Your tag: $TAG"
+            exit 1
+          fi
+          echo "Pre-release tag format is valid: $TAG"
+
   release_build:
     name: (Release) Build libs for ${{ matrix.target_name }}
     runs-on: ${{ matrix.os }}
+    needs: release_build_validate
 
     strategy:
       matrix:
@@ -43,19 +61,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-
-      - name: Validate pre-release tag format
-        if: inputs.prerelease == true
-        shell: bash
-        run: |
-          TAG="${{ inputs.release_tag }}"
-          if ! echo "$TAG" | grep -qE '-(alpha|beta|rc|pre|preview|dev|nightly)'; then
-            echo "Error: Pre-release tag must contain a suffix like -alpha, -beta, -rc1, etc."
-            echo "  Examples: v1.0.0-beta, v2.0.0-rc1, v1.5.0-alpha.1"
-            echo "  Your tag: $TAG"
-            exit 1
-          fi
-          echo "Pre-release tag format is valid: $TAG"
 
       - name: Build Zig libs
         run: |
