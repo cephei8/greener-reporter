@@ -123,12 +123,18 @@ jobs:
       - if: runner.os == 'Windows'
         name: Copy lib files
         run: |
-          cp zig-out/lib/greener_reporter.lib target/release/
+          cp zig-out/lib/greener_reporter.dll tests-ffi/
+          cp target/release/greener_servermock.dll tests-ffi/
+
           cp zig-out/lib/greener_reporter.dll target/release/
           cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
 
       - name: Run Rust tests
         run: cargo test --release
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "^1.25"
 
       - name: Run tests
         run: go test
