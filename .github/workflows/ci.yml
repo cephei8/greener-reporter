@@ -24,7 +24,11 @@ jobs:
           docker cp zig-builder:/output/. ./zig-out/lib/
 
       - name: Build Rust part
-        run: cargo build
+        run: cargo build --release
+
+      - name: Run Rust tests
+        run: cargo test --release
 
       - name: Run tests
-        run: cargo test
+        run: go test
+        working-directory: tests-ffi

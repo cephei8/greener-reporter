@@ -3,70 +3,41 @@
 
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+typedef struct greener_servermock greener_servermock_t;
 
-struct greener_servermock;
-struct greener_servermock_error;
+typedef struct greener_servermock_error {
+  const char *message;
+} greener_servermock_error_t;
 
+greener_servermock_t *greener_servermock_new();
 
-struct greener_servermock*
-greener_servermock_new();
+void greener_servermock_delete(greener_servermock_t *ctx,
+                               const greener_servermock_error_t **error);
 
-void
-greener_servermock_delete(
-    struct greener_servermock* ctx,
-    const struct greener_servermock_error** error);
+void greener_servermock_serve(greener_servermock_t *ctx,
+                              const char *responses,
+                              const greener_servermock_error_t **error);
 
-void
-greener_servermock_serve(
-    struct greener_servermock* ctx,
-    const char* responses,
-    const struct greener_servermock_error** error);
+int greener_servermock_get_port(greener_servermock_t *ctx,
+                                const greener_servermock_error_t **error);
 
-int
-greener_servermock_get_port(
-    struct greener_servermock* ctx,
-    const struct greener_servermock_error** error);
+void greener_servermock_assert(greener_servermock_t *ctx,
+                               const char *calls,
+                               const greener_servermock_error_t **error);
 
-void
-greener_servermock_assert(
-    struct greener_servermock* ctx,
-    const char* calls,
-    const struct greener_servermock_error** error);
+void greener_servermock_fixture_names(
+    greener_servermock_t *ctx, const char ***names, uint32_t *num_names,
+    const greener_servermock_error_t **error);
 
-void
-greener_servermock_fixture_names(
-    struct greener_servermock* ctx,
-    const char*** names,
-    uint32_t* num_names,
-    const struct greener_servermock_error** error);
+void greener_servermock_fixture_calls(
+    greener_servermock_t *ctx, const char *fixture_name,
+    const char **calls, const greener_servermock_error_t **error);
 
-void
-greener_servermock_fixture_calls(
-    struct greener_servermock* ctx,
-    const char* fixture_name,
-    const char** calls,
-    const struct greener_servermock_error** error);
+void greener_servermock_fixture_responses(
+    greener_servermock_t *ctx, const char *fixture_name,
+    const char **responses, const greener_servermock_error_t **error);
 
-void
-greener_servermock_fixture_responses(
-    struct greener_servermock* ctx,
-    const char* fixture_name,
-    const char** responses,
-    const struct greener_servermock_error** error);
-
-void
-greener_servermock_error_delete(
-    const struct greener_servermock_error* error);
-
-struct greener_servermock_error {
-    const char *message;
-};
-
-#ifdef __cplusplus
-}
-#endif
+void greener_servermock_error_delete(
+    const greener_servermock_error_t *error);
 
 #endif // GREENER_SERVERMOCK_GREENER_SERVERMOCK_H

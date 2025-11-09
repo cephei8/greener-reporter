@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "servermock",
-    "tests-ffi",
+    "servermock-rs",
+    "tests-ffi-rs",
 ]
