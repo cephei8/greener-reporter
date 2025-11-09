@@ -7,76 +7,130 @@ on:
         description: "Release tag"
         required: true
         type: string
+      prerelease:
+        description: "Create as pre-release"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  TARGETS: "linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 win-x64 mac-x64 mac-arm64"
+  ZIG_TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu x86_64-macos aarch64-macos"
 
 jobs:
   release_build:
-    name: (Release) Build libs on ${{ matrix.os }}
+    name: (Release) Build libs for ${{ matrix.target_name }}
     runs-on: ${{ matrix.os }}
+
     strategy:
       matrix:
         include:
           - os: ubuntu-24.04
             target_name: "linux-x64"
+            zig_target: "x86_64-linux-gnu"
           - os: ubuntu-24.04-arm
             target_name: "linux-arm64"
+            zig_target: "aarch64-linux-gnu"
           - os: windows-latest
             target_name: "win-x64"
+            zig_target: "x86_64-windows-gnu"
           - os: macos-15-intel
             target_name: "mac-x64"
+            zig_target: "x86_64-macos"
           - os: macos-15
             target_name: "mac-arm64"
-    defaults:
-      run:
-        shell: bash
+            zig_target: "aarch64-macos"
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build
+      - name: Validate pre-release tag format
+        if: inputs.prerelease == true
+        shell: bash
         run: |
-          cargo build --release
+          TAG="${{ inputs.release_tag }}"
+          if ! echo "$TAG" | grep -qE '-(alpha|beta|rc|pre|preview|dev|nightly)'; then
+            echo "Error: Pre-release tag must contain a suffix like -alpha, -beta, -rc1, etc."
+            echo "  Examples: v1.0.0-beta, v2.0.0-rc1, v1.5.0-alpha.1"
+            echo "  Your tag: $TAG"
+            exit 1
+          fi
+          echo "Pre-release tag format is valid: $TAG"
+
+      - name: Build Zig libs
+        run: |
+          docker build \
+            --build-arg TARGETS="${{ matrix.zig_target }}" \
+            -t greener-reporter-zig:${{ matrix.target_name }} \
+            .
+
+      - name: Create output directory
+        run: mkdir -p ./zig-out/lib
+
+      - name: Copy Zig libraries from container
+        shell: bash
+        run: |
+          docker run --name zig-builder greener-reporter-zig:${{ matrix.target_name }}
+          docker cp zig-builder:/output/${{ matrix.zig_target }}/. ./zig-out/lib/
+
+      - name: Build Rust part (servermock)
+        run: cargo build --release
 
       - if: runner.os == 'macOS'
-        name: Fix rpath for libs
+        name: Fix rpath for servermock
         run: |
-          install_name_tool -id @rpath/libgreener_reporter.dylib target/release/libgreener_reporter.dylib
+          install_name_tool -id @rpath/libgreener_reporter.dylib zig-out/lib/libgreener_reporter.dylib
           install_name_tool -id @rpath/libgreener_servermock.dylib target/release/libgreener_servermock.dylib
 
       - if: runner.os == 'Windows'
         name: Rename lib files
         run: |
-          cp target/release/greener_reporter.dll.lib target/release/greener_reporter.lib
+          cp zig-out/lib/greener_reporter.dll.lib zig-out/lib/greener_reporter.lib
           cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
 
       - name: Run tests
         run: cargo test --release
 
       - name: Create release tar directories
+        shell: bash
         run: |
           mkdir -p release_tar/reporter
           mkdir -p release_tar/servermock
 
       - if: runner.os == 'Windows'
-        name: Prepare release tar directories
+        name: Prepare greener_reporter (Zig) release tar
         run: |
-          cp target/release/greener_reporter.dll release_tar/reporter
-          cp target/release/greener_reporter.lib release_tar/reporter
+          cp zig-out/lib/greener_reporter.dll release_tar/reporter
+          cp zig-out/lib/greener_reporter.lib release_tar/reporter
+
+      - if: runner.os == 'macOS'
+        name: Prepare greener_reporter (Zig) release tar
+        run: |
+          cp zig-out/lib/libgreener_reporter.dylib release_tar/reporter
+
+      - if: runner.os == 'Linux'
+        name: Prepare greener_reporter (Zig) release tar
+        run: |
+          cp zig-out/lib/libgreener_reporter.so release_tar/reporter
+
+      - if: runner.os == 'Windows'
+        name: Prepare servermock (Rust) release tar
+        run: |
           cp target/release/greener_servermock.dll release_tar/servermock
           cp target/release/greener_servermock.lib release_tar/servermock
 
       - if: runner.os == 'macOS'
-        name: Prepare release tar directories
+        name: Prepare servermock (Rust) release tar
         run: |
-          cp target/release/libgreener_reporter.dylib release_tar/reporter
           cp target/release/libgreener_servermock.dylib release_tar/servermock
 
       - if: runner.os == 'Linux'
-        name: Prepare release tar directories
+        name: Prepare servermock (Rust) release tar
         run: |
-          cp target/release/libgreener_reporter.so release_tar/reporter
           cp target/release/libgreener_servermock.so release_tar/servermock
 
       - name: Create release tars
+        shell: bash
         run: |
           tar -czf greener-reporter-lib-${{ matrix.target_name }}.tar.gz -C release_tar/reporter .
           tar -czf greener-servermock-lib-${{ matrix.target_name }}.tar.gz -C release_tar/servermock .
@@ -99,9 +153,6 @@ jobs:
     name: (Release) Create release
     needs: release_build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
 
     permissions:
       contents: write
@@ -117,11 +168,15 @@ jobs:
       - name: Create include tars
         working-directory: release_tars
         run: |
-          tar -czf greener-reporter-include.tar.gz -C ../dist/include greener_reporter
-          tar -czf greener-servermock-include.tar.gz -C ../dist/include greener_servermock
+          tar -czf greener-reporter-include.tar.gz -C ../include greener_reporter
+          tar -czf greener-servermock-include.tar.gz -C ../include greener_servermock
 
       - name: Create release
         run: |
-          gh release create ${{ inputs.release_tag }} ./release_tars/*
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create ${{ inputs.release_tag }} $PRERELEASE_FLAG ./release_tars/*
         env:
           GH_TOKEN: ${{ github.token }}
