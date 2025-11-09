@@ -5,18 +5,14 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "cargo"
-    directory: "/reporter"
+    directory: "/servermock-rs"
     schedule:
       interval: "weekly"
   - package-ecosystem: "cargo"
-    directory: "/reporter-cli"
+    directory: "/tests-ffi-rs"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "cargo"
-    directory: "/servermock"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "cargo"
+  - package-ecosystem: "gomod"
     directory: "/tests-ffi"
     schedule:
       interval: "weekly"
