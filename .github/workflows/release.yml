@@ -14,8 +14,7 @@ on:
         default: false
 
 env:
-  # TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu x86_64-macos aarch64-macos"
-  TARGETS: "x86_64-macos aarch64-macos"
+  TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu x86_64-macos aarch64-macos"
 
 jobs:
   release_build_validate:
