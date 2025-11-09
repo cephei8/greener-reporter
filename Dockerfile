@@ -11,7 +11,8 @@ ARG TARGETS=""
 RUN nix flake check
 
 RUN mkdir -p /output
-RUN if [ -z "$TARGETS" ]; then \
+RUN set -e; \
+    if [ -z "$TARGETS" ]; then \
     nix build; \
     cp -r result/* /output/; \
     rm -f result; \

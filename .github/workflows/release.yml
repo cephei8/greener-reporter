@@ -14,17 +14,21 @@ on:
         default: false
 
 env:
-  TARGETS: "linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 win-x64 mac-x64 mac-arm64"
-  ZIG_TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu x86_64-macos aarch64-macos"
+  # TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu x86_64-macos aarch64-macos"
+  TARGETS: "x86_64-macos aarch64-macos"
 
 jobs:
   release_build_validate:
     name: Validate release
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Validate pre-release tag format
         if: inputs.prerelease == true
-        shell: bash
         run: |
           TAG="${{ inputs.release_tag }}"
           if ! echo "$TAG" | grep -qE -- '-(alpha|beta|rc|pre|preview|dev|nightly)'; then
@@ -36,9 +40,41 @@ jobs:
           echo "Pre-release tag format is valid: $TAG"
 
   release_build:
-    name: (Release) Build libs for ${{ matrix.target_name }}
-    runs-on: ${{ matrix.os }}
+    name: Build libraries
+    runs-on: ubuntu-latest
     needs: release_build_validate
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build
+        run: |
+          docker build \
+            --build-arg TARGETS="${{ env.TARGETS }}" \
+            -t greener-reporter-zig:all \
+            .
+
+      - name: Extract libraries from container
+        run: |
+          docker run --name zig-builder greener-reporter-zig:all
+          docker cp zig-builder:/output/. ./zig-libs/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: zig-libs-all
+          path: zig-libs/
+          if-no-files-found: error
+          retention-days: 1
+
+  release_build_rs:
+    name: (Release) Build and test for ${{ matrix.target_name }}
+    runs-on: ${{ matrix.os }}
+    needs: release_build
 
     strategy:
       matrix:
@@ -59,45 +95,43 @@ jobs:
             target_name: "mac-arm64"
             zig_target: "aarch64-macos"
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build Zig libs
+      - name: Download Zig libs
+        uses: actions/download-artifact@v6
+        with:
+          name: zig-libs-all
+          path: zig-libs
+
+      - name: Copy Zig libs to output directory
         run: |
-          docker build \
-            --build-arg TARGETS="${{ matrix.zig_target }}" \
-            -t greener-reporter-zig:${{ matrix.target_name }} \
-            .
+          mkdir -p ./zig-out/lib
+          cp -r zig-libs/${{ matrix.zig_target }}/* ./zig-out/lib/
 
-      - name: Create output directory
-        run: mkdir -p ./zig-out/lib
-
-      - name: Copy Zig libraries from container
-        shell: bash
-        run: |
-          docker run --name zig-builder greener-reporter-zig:${{ matrix.target_name }}
-          docker cp zig-builder:/output/${{ matrix.zig_target }}/. ./zig-out/lib/
-
-      - name: Build Rust part (servermock)
+      - name: Build Rust part
         run: cargo build --release
 
       - if: runner.os == 'macOS'
-        name: Fix rpath for servermock
+        name: Fix rpath
         run: |
-          install_name_tool -id @rpath/libgreener_reporter.dylib zig-out/lib/libgreener_reporter.dylib
           install_name_tool -id @rpath/libgreener_servermock.dylib target/release/libgreener_servermock.dylib
 
       - if: runner.os == 'Windows'
-        name: Rename lib files
+        name: Copy lib files
         run: |
-          cp zig-out/lib/greener_reporter.dll.lib zig-out/lib/greener_reporter.lib
+          cp zig-out/lib/greener_reporter.lib target/release/
+          cp zig-out/lib/greener_reporter.dll target/release/
           cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
 
       - name: Run tests
         run: cargo test --release
 
       - name: Create release tar directories
-        shell: bash
         run: |
           mkdir -p release_tar/reporter
           mkdir -p release_tar/servermock
@@ -135,7 +169,6 @@ jobs:
           cp target/release/libgreener_servermock.so release_tar/servermock
 
       - name: Create release tars
-        shell: bash
         run: |
           tar -czf greener-reporter-lib-${{ matrix.target_name }}.tar.gz -C release_tar/reporter .
           tar -czf greener-servermock-lib-${{ matrix.target_name }}.tar.gz -C release_tar/servermock .
@@ -156,11 +189,15 @@ jobs:
 
   release_create:
     name: (Release) Create release
-    needs: release_build
+    needs: release_build_rs
     runs-on: ubuntu-latest
 
     permissions:
       contents: write
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v5
