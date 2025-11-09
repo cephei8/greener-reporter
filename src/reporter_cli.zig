@@ -215,7 +215,11 @@ fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !struct {
 }
 
 fn getEnvVar(allocator: std.mem.Allocator, name: []const u8) !?[:0]const u8 {
-    const value = std.posix.getenv(name) orelse return null;
+    const value = std.process.getEnvVarOwned(allocator, name) catch |err| {
+        if (err == error.EnvironmentVariableNotFound) return null;
+        return err;
+    };
+    defer allocator.free(value);
     return try allocator.dupeZ(u8, value);
 }
 

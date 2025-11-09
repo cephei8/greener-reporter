@@ -52,6 +52,9 @@
             runHook preInstall
             mkdir -p $out
             cp -r $TMPDIR/install/lib/* $out/
+            if [[ "${zigTarget}" == *"windows"* ]]; then
+              cp -r $TMPDIR/install/bin/*.dll $out/
+            fi
             runHook postInstall
           '';
 

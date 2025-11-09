@@ -36,7 +36,6 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
     });
     reporter_static.linkLibC();
-    b.installArtifact(reporter_static);
 
     // const servermock = b.addLibrary(.{
     //     .name = "greener_servermock",
