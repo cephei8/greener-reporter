@@ -79,20 +79,15 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            target_name: "linux-x64"
-            zig_target: "x86_64-linux-gnu"
+            target_name: "x86_64-linux-gnu"
           - os: ubuntu-24.04-arm
-            target_name: "linux-arm64"
-            zig_target: "aarch64-linux-gnu"
+            target_name: "aarch64-linux-gnu"
           - os: windows-latest
-            target_name: "win-x64"
-            zig_target: "x86_64-windows-gnu"
+            target_name: "x86_64-windows-gnu"
           - os: macos-15-intel
-            target_name: "mac-x64"
-            zig_target: "x86_64-macos"
+            target_name: "x86_64-macos"
           - os: macos-15
-            target_name: "mac-arm64"
-            zig_target: "aarch64-macos"
+            target_name: "aarch64-macos"
 
     defaults:
       run:
@@ -110,7 +105,7 @@ jobs:
       - name: Copy Zig libs to output directory
         run: |
           mkdir -p ./zig-out/lib
-          cp -r zig-libs/${{ matrix.zig_target }}/* ./zig-out/lib/
+          cp -r zig-libs/${{ matrix.target_name }}/* ./zig-out/lib/
 
       - name: Build Rust part
         run: cargo build --release
@@ -213,8 +208,48 @@ jobs:
 
       - uses: actions/download-artifact@v6
         with:
-          path: release_tars
-          merge-multiple: true
+          name: greener-reporter-lib-x86_64-linux-gnu.tar.gz
+          path: ./release_tars
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-servermock-lib-x86_64-linux-gnu.tar.gz
+          path: ./release_tars
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-reporter-lib-aarch64-linux-gnu.tar.gz
+          path: ./release_tars
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-servermock-lib-aarch64-linux-gnu.tar.gz
+          path: ./release_tars
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-reporter-lib-x86_64-windows-gnu.tar.gz
+          path: ./release_tars
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-servermock-lib-x86_64-windows-gnu.tar.gz
+          path: ./release_tars
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-reporter-lib-x86_64-macos.tar.gz
+          path: ./release_tars
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-servermock-lib-x86_64-macos.tar.gz
+          path: ./release_tars
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-reporter-lib-aarch64-macos.tar.gz
+          path: ./release_tars
+      - uses: actions/download-artifact@v6
+        with:
+          name: greener-servermock-lib-aarch64-macos.tar.gz
+          path: ./release_tars
 
       - name: Create include tars
         working-directory: release_tars
