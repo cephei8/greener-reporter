@@ -43,7 +43,7 @@ fn main() {
         target_dir_zig.display()
     );
 
-    let include_dir = PathBuf::from(&manifest_dir).join("../dist/include");
+    let include_dir = PathBuf::from(&manifest_dir).join("../include");
     let reporter_header = include_dir.join("greener_reporter/greener_reporter.h");
     let servermock_header = include_dir.join("greener_servermock/greener_servermock.h");
 

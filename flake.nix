@@ -17,7 +17,16 @@
 
         zig = pkgs.zigpkgs."0.15.2";
 
-        buildForTargets = targets: pkgs.stdenv.mkDerivation {
+        hostToZigTarget = {
+          "aarch64-darwin" = "aarch64-macos";
+          "x86_64-darwin" = "x86_64-macos";
+          "x86_64-linux" = "x86_64-linux-gnu";
+          "aarch64-linux" = "aarch64-linux-gnu";
+        };
+
+        defaultTarget = hostToZigTarget.${pkgs.stdenv.hostPlatform.system};
+
+        buildForTarget = zigTarget: pkgs.stdenv.mkDerivation {
           pname = "greener-reporter";
           version = "0.1.0";
 
@@ -32,33 +41,17 @@
             export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache
             export HOME=$TMPDIR
 
-            ${pkgs.lib.concatMapStringsSep "\n" (target: ''
-              echo "Building for target: ${target}"
-              zig build -Doptimize=ReleaseSafe --prefix $TMPDIR/install-${target} --seed 0x00000000 -Dtarget=${target}
-            '') targets}
+            zig build -Doptimize=ReleaseSafe --prefix $TMPDIR/install --seed 0x00000000 -Dtarget=${zigTarget}
 
             runHook postBuild
           '';
 
-          checkPhase = ''
-            runHook preCheck
-            export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache
-            export HOME=$TMPDIR
-
-            echo "Running tests"
-            zig build test --seed 0x00000000
-
-            runHook postCheck
-          '';
-
-          doCheck = true;
+          doCheck = false;
 
           installPhase = ''
             runHook preInstall
-            ${pkgs.lib.concatMapStringsSep "\n" (target: ''
-              mkdir -p $out/${target}
-              cp -r $TMPDIR/install-${target}/lib/* $out/${target}/
-            '') targets}
+            mkdir -p $out
+            cp -r $TMPDIR/install/lib/* $out/
             runHook postInstall
           '';
 
@@ -78,9 +71,48 @@
         };
 
         packages = {
-          default = buildForTargets [ "aarch64-macos" ];
-          minimal = buildForTargets [ "x86_64-linux-gnu" ];
-          all = buildForTargets [ "x86_64-linux-gnu" "aarch64-linux-gnu" ];
+          default = buildForTarget defaultTarget;
+          x86_64-linux-gnu = buildForTarget "x86_64-linux-gnu";
+          aarch64-linux-gnu = buildForTarget "aarch64-linux-gnu";
+          x86_64-linux-musl = buildForTarget "x86_64-linux-musl";
+          aarch64-linux-musl = buildForTarget "aarch64-linux-musl";
+          x86_64-windows-gnu = buildForTarget "x86_64-windows-gnu";
+          x86_64-macos = buildForTarget "x86_64-macos";
+          aarch64-macos = buildForTarget "aarch64-macos";
+        };
+
+        checks = {
+          tests = pkgs.stdenv.mkDerivation {
+            pname = "greener-reporter-tests";
+            version = "0.1.0";
+
+            src = ./.;
+
+            nativeBuildInputs = [ zig ];
+
+            dontConfigure = true;
+            dontBuild = true;
+
+            checkPhase = ''
+              runHook preCheck
+              export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache
+              export HOME=$TMPDIR
+
+              echo "Running tests"
+              zig build test --seed 0x00000000
+
+              runHook postCheck
+            '';
+
+            doCheck = true;
+
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out
+              echo "Tests passed" > $out/result
+              runHook postInstall
+            '';
+          };
         };
       }
     );

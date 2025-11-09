@@ -43,6 +43,7 @@ pub fn build(b: *std.Build) void {
     //     .root_module = servermock_module,
     //     .linkage = .dynamic,
     // });
+    // servermock.linkLibC();
     // b.installArtifact(servermock);
 
     const test_module = b.createModule(.{

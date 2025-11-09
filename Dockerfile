@@ -6,7 +6,20 @@ WORKDIR /workspace
 
 COPY . .
 
-ARG PACKAGE="default"
+ARG TARGETS=""
 
-RUN nix build ".#${PACKAGE}"
-RUN mkdir -p /output && cp -r result/* /output/
+RUN nix flake check
+
+RUN mkdir -p /output
+RUN if [ -z "$TARGETS" ]; then \
+    nix build; \
+    cp -r result/* /output/; \
+    rm -f result; \
+    else \
+    for target in $TARGETS; do \
+    nix build ".#$target"; \
+    mkdir -p /output/$target; \
+    cp -r result/* /output/$target/; \
+    rm -f result; \
+    done; \
+    fi
