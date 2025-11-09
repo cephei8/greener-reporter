@@ -128,8 +128,12 @@ jobs:
           cp zig-out/lib/greener_reporter.dll target/release/
           cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
 
-      - name: Run tests
+      - name: Run Rust tests
         run: cargo test --release
+
+      - name: Run tests
+        run: go test
+        working-directory: tests-ffi
 
       - name: Create release tar directories
         run: |
