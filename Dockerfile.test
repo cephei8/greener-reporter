@@ -1,0 +1,63 @@
+FROM debian:latest
+
+RUN apt-get update && \
+    apt-get install -y \
+    curl \
+    tar \
+    xz-utils \
+    gcc \
+    g++ \
+    make \
+    git \
+    clang \
+    llvm-dev
+
+# install Zig
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+    ZIG_ARCH="aarch64"; \
+    else \
+    ZIG_ARCH="x86_64"; \
+    fi && \
+    curl -L https://ziglang.org/download/0.15.2/zig-${ZIG_ARCH}-linux-0.15.2.tar.xz -o /tmp/zig.tar.xz && \
+    tar -xf /tmp/zig.tar.xz -C /opt && \
+    ln -s /opt/zig-${ZIG_ARCH}-linux-0.15.2/zig /usr/local/bin/zig && \
+    rm /tmp/zig.tar.xz
+
+# install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# install Go
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+    GO_ARCH="arm64"; \
+    else \
+    GO_ARCH="amd64"; \
+    fi && \
+    curl -L https://go.dev/dl/go1.25.0.linux-${GO_ARCH}.tar.gz -o /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV CGO_ENABLED=1
+
+WORKDIR /workspace
+COPY . .
+
+RUN mkdir -p zig-out/lib
+RUN zig build -Doptimize=ReleaseSafe --seed 0x00000000
+
+RUN cargo build --release
+
+RUN cp zig-out/lib/* tests-ffi/ && \
+    cp zig-out/lib/* target/release/ && \
+    cp target/release/libgreener_servermock.so tests-ffi/
+
+RUN cargo test --release -- --nocapture
+
+WORKDIR /workspace/tests-ffi
+RUN go test -v
+
+RUN echo "Passed."
+
+WORKDIR /workspace

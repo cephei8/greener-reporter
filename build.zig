@@ -27,7 +27,9 @@ pub fn build(b: *std.Build) void {
         .root_module = reporter_module,
         .linkage = .dynamic,
     });
-    reporter.linkLibC();
+    if (target.result.os.tag == .linux) {
+        reporter.linkLibC();
+    }
     b.installArtifact(reporter);
 
     const reporter_static = b.addLibrary(.{
@@ -35,14 +37,18 @@ pub fn build(b: *std.Build) void {
         .root_module = reporter_module,
         .linkage = .static,
     });
-    reporter_static.linkLibC();
+    if (target.result.os.tag == .linux) {
+        reporter_static.linkLibC();
+    }
 
     // const servermock = b.addLibrary(.{
     //     .name = "greener_servermock",
     //     .root_module = servermock_module,
     //     .linkage = .dynamic,
     // });
-    // servermock.linkLibC();
+    // if (target.result.os.tag == .linux) {
+    //     servermock.linkLibC();
+    // }
     // b.installArtifact(servermock);
 
     const test_module = b.createModule(.{
