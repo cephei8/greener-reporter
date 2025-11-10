@@ -91,20 +91,20 @@ jobs:
 
       - name: Build with Zig
         run: |
-          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-windows
+          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-windows-msvc
 
       - name: Prepare artifacts
         run: |
-          mkdir -p zig-libs/x86_64-windows
-          cp -r zig-out/lib/* zig-libs/x86_64-windows/
+          mkdir -p zig-libs/x86_64-windows-msvc
+          cp -r zig-out/lib/* zig-libs/x86_64-windows-msvc/
           if [ -f zig-out/bin/*.dll ]; then
-            cp -r zig-out/bin/*.dll zig-libs/x86_64-windows/
+            cp -r zig-out/bin/*.dll zig-libs/x86_64-windows-msvc/
           fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: zig-libs-x86_64-windows
+          name: zig-libs-x86_64-windows-msvc
           path: zig-libs/
           if-no-files-found: error
           retention-days: 1
@@ -122,7 +122,7 @@ jobs:
           - os: ubuntu-24.04-arm
             target_name: "aarch64-linux-gnu"
           - os: windows-latest
-            target_name: "x86_64-windows"
+            target_name: "x86_64-windows-msvc"
           - os: macos-15-intel
             target_name: "x86_64-macos"
           - os: macos-15
@@ -135,18 +135,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - if: matrix.target_name != 'x86_64-windows'
+      - if: matrix.target_name != 'x86_64-windows-msvc'
         name: Download Zig libs
         uses: actions/download-artifact@v6
         with:
           name: zig-libs-all
           path: zig-libs
 
-      - if: matrix.target_name == 'x86_64-windows'
+      - if: matrix.target_name == 'x86_64-windows-msvc'
         name: Download Zig libs (Windows MSVC)
         uses: actions/download-artifact@v6
         with:
-          name: zig-libs-x86_64-windows
+          name: zig-libs-x86_64-windows-msvc
           path: zig-libs
 
       - name: Copy Zig libs to output directory
@@ -273,11 +273,11 @@ jobs:
 
       - uses: actions/download-artifact@v6
         with:
-          name: greener-reporter-lib-x86_64-windows.tar.gz
+          name: greener-reporter-lib-x86_64-windows-msvc.tar.gz
           path: ./release_tars
       - uses: actions/download-artifact@v6
         with:
-          name: greener-servermock-lib-x86_64-windows.tar.gz
+          name: greener-servermock-lib-x86_64-windows-msvc.tar.gz
           path: ./release_tars
 
       - uses: actions/download-artifact@v6
