@@ -79,7 +79,7 @@
           aarch64-linux-gnu = buildForTarget "aarch64-linux-gnu";
           x86_64-linux-musl = buildForTarget "x86_64-linux-musl";
           aarch64-linux-musl = buildForTarget "aarch64-linux-musl";
-          x86_64-windows-gnu = buildForTarget "x86_64-windows-gnu";
+          x86_64-windows = buildForTarget "x86_64-windows";
           x86_64-macos = buildForTarget "x86_64-macos";
           aarch64-macos = buildForTarget "aarch64-macos";
         };
