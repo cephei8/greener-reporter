@@ -1,7 +1,6 @@
 name: Release
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -304,8 +303,6 @@ jobs:
         run: |
           tar -czf greener-reporter-include.tar.gz -C ../include greener_reporter
           tar -czf greener-servermock-include.tar.gz -C ../include greener_servermock
-
-      - run: exit 1
 
       - name: Create release
         run: |
