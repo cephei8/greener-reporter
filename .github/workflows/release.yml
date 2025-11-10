@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -14,7 +15,7 @@ on:
         default: false
 
 env:
-  TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu x86_64-macos aarch64-macos"
+  TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-macos aarch64-macos"
 
 jobs:
   release_build_validate:
@@ -70,10 +71,49 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  release_build_nix_windows:
+    name: Build library on Windows
+    runs-on: windows-latest
+    needs: release_build_validate
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Zig
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://ziglang.org/download/0.15.2/zig-x86_64-windows-0.15.2.zip -OutFile zig.zip
+          Expand-Archive -Path zig.zip -DestinationPath .
+          echo "${{ github.workspace }}/zig-x86_64-windows-0.15.2" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build with Zig
+        run: |
+          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-windows
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p zig-libs/x86_64-windows
+          cp -r zig-out/lib/* zig-libs/x86_64-windows/
+          if [ -f zig-out/bin/*.dll ]; then
+            cp -r zig-out/bin/*.dll zig-libs/x86_64-windows/
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: zig-libs-x86_64-windows
+          path: zig-libs/
+          if-no-files-found: error
+          retention-days: 1
+
   release_build_rs:
     name: (Release) Build and test for ${{ matrix.target_name }}
     runs-on: ${{ matrix.os }}
-    needs: release_build
+    needs: [release_build, release_build_nix_windows]
 
     strategy:
       matrix:
@@ -83,7 +123,7 @@ jobs:
           - os: ubuntu-24.04-arm
             target_name: "aarch64-linux-gnu"
           - os: windows-latest
-            target_name: "x86_64-windows-gnu"
+            target_name: "x86_64-windows"
           - os: macos-15-intel
             target_name: "x86_64-macos"
           - os: macos-15
@@ -96,10 +136,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Download Zig libs
+      - if: matrix.target_name != 'x86_64-windows'
+        name: Download Zig libs
         uses: actions/download-artifact@v6
         with:
           name: zig-libs-all
+          path: zig-libs
+
+      - if: matrix.target_name == 'x86_64-windows'
+        name: Download Zig libs (Windows MSVC)
+        uses: actions/download-artifact@v6
+        with:
+          name: zig-libs-x86_64-windows
           path: zig-libs
 
       - name: Copy Zig libs to output directory
@@ -226,11 +274,11 @@ jobs:
 
       - uses: actions/download-artifact@v6
         with:
-          name: greener-reporter-lib-x86_64-windows-gnu.tar.gz
+          name: greener-reporter-lib-x86_64-windows.tar.gz
           path: ./release_tars
       - uses: actions/download-artifact@v6
         with:
-          name: greener-servermock-lib-x86_64-windows-gnu.tar.gz
+          name: greener-servermock-lib-x86_64-windows.tar.gz
           path: ./release_tars
 
       - uses: actions/download-artifact@v6
@@ -256,6 +304,8 @@ jobs:
         run: |
           tar -czf greener-reporter-include.tar.gz -C ../include greener_reporter
           tar -czf greener-servermock-include.tar.gz -C ../include greener_servermock
+
+      - run: exit 1
 
       - name: Create release
         run: |
