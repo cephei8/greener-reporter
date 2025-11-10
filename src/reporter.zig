@@ -1,5 +1,8 @@
 const std = @import("std");
 
+var global_gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }){};
+const global_alloc = global_gpa.allocator();
+
 pub const greener_reporter = opaque {};
 pub const greener_reporter_session = extern struct {
     id: [*:0]const u8,
@@ -21,16 +24,14 @@ pub export fn greener_reporter_new(
 ) ?*greener_reporter {
     err.* = null;
 
-    const alloc = std.heap.c_allocator;
-
     var err_detail: ?ErrorDetail = null;
     const reporter = Reporter.init(
-        alloc,
+        global_alloc,
         endpoint,
         api_key,
         &err_detail,
     ) catch |e| {
-        err.* = createError(alloc, e, err_detail);
+        err.* = createError(global_alloc, e, err_detail);
         return null;
     };
 
@@ -43,14 +44,12 @@ pub export fn greener_reporter_delete(
 ) void {
     err.* = null;
 
-    const alloc = std.heap.c_allocator;
-
     const r: *Reporter = @ptrCast(@alignCast(reporter));
 
     r.deinit() catch |e| {
-        err.* = createError(alloc, e, null);
+        err.* = createError(global_alloc, e, null);
     };
-    alloc.destroy(r);
+    global_alloc.destroy(r);
 }
 
 pub export fn greener_reporter_report_error_pop(
@@ -76,31 +75,29 @@ pub export fn greener_reporter_session_create(
 ) ?*const greener_reporter_session {
     err.* = null;
 
-    const alloc = std.heap.c_allocator;
-
     const r: *Reporter = @ptrCast(@alignCast(reporter));
 
     var err_detail: ?ErrorDetail = null;
     const session = Session.init(
-        alloc,
+        global_alloc,
         session_id,
         description,
         baggage,
         labels,
         &err_detail,
     ) catch |e| {
-        err.* = createError(alloc, e, err_detail);
+        err.* = createError(global_alloc, e, err_detail);
         return null;
     };
 
     err_detail = null;
     const session_id_res = r.createSession(session, &err_detail) catch |e| {
-        err.* = createError(alloc, e, err_detail);
+        err.* = createError(global_alloc, e, err_detail);
         return null;
     };
 
-    const session_res = alloc.create(greener_reporter_session) catch |e| {
-        err.* = createError(alloc, e, null);
+    const session_res = global_alloc.create(greener_reporter_session) catch |e| {
+        err.* = createError(global_alloc, e, null);
         return null;
     };
     session_res.* = greener_reporter_session{ .id = session_id_res };
@@ -122,13 +119,11 @@ pub export fn greener_reporter_testcase_create(
 ) void {
     err.* = null;
 
-    const alloc = std.heap.c_allocator;
-
     const r: *Reporter = @ptrCast(@alignCast(reporter));
 
     var err_detail: ?ErrorDetail = null;
     const testcase = Testcase.init(
-        alloc,
+        global_alloc,
         session_id,
         testcase_name,
         testcase_classname,
@@ -139,31 +134,25 @@ pub export fn greener_reporter_testcase_create(
         baggage,
         &err_detail,
     ) catch |e| {
-        err.* = createError(alloc, e, err_detail);
+        err.* = createError(global_alloc, e, err_detail);
         return;
     };
 
-    r.createTestcase(testcase) catch |e| {
-        err.* = createError(alloc, e, err_detail);
-    };
+    r.createTestcase(testcase);
 }
 
 pub export fn greener_reporter_session_delete(
     session: *const greener_reporter_session,
 ) void {
-    const alloc = std.heap.c_allocator;
-
-    alloc.free(@constCast(std.mem.span(session.id)));
-    alloc.destroy(session);
+    global_alloc.free(@constCast(std.mem.span(session.id)));
+    global_alloc.destroy(session);
 }
 
 pub export fn greener_reporter_error_delete(
     err: *const greener_reporter_error,
 ) void {
-    const alloc = std.heap.c_allocator;
-
-    alloc.free(@constCast(std.mem.span(err.message)));
-    alloc.destroy(err);
+    global_alloc.free(@constCast(std.mem.span(err.message)));
+    global_alloc.destroy(err);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -507,10 +496,10 @@ const TestcaseBatchRequest = struct {
 };
 
 fn createError(
-    allocator: std.mem.Allocator,
+    alloc: std.mem.Allocator,
     e: anyerror,
     detail_opt: ?ErrorDetail,
-) *const greener_reporter_error {
+) ?*const greener_reporter_error {
     const code = switch (e) {
         Error.InvalidArgument => GREENER_REPORTER_ERROR,
         Error.Ingress => GREENER_REPORTER_ERROR_INGRESS,
@@ -529,13 +518,23 @@ fn createError(
             .ingress_code = 0,
         };
 
-    const msg = allocator.dupeZ(u8, detail.message) catch unreachable;
+    const msg = alloc.dupeZ(u8, detail.message) catch |alloc_err| {
+        std.debug.print("ERROR: Failed to allocate memory for error message: {}\n", .{alloc_err});
+        if (detail_opt) |d| {
+            alloc.free(d.message);
+        }
+        return null;
+    };
 
     if (detail_opt) |d| {
-        allocator.free(d.message);
+        alloc.free(d.message);
     }
 
-    const err = allocator.create(greener_reporter_error) catch unreachable;
+    const err = alloc.create(greener_reporter_error) catch |alloc_err| {
+        std.debug.print("ERROR: Failed to allocate memory for error struct: {}\n", .{alloc_err});
+        alloc.free(msg);
+        return null;
+    };
     err.* = greener_reporter_error{
         .code = code,
         .ingress_code = detail.ingress_code orelse 0,
@@ -552,8 +551,62 @@ const MessageType = enum {
 
 const Message = struct {
     type: MessageType,
-    payload: ?Testcase,
+    payload: usize,
 };
+
+fn MessageRingBuffer(comptime capacity: usize) type {
+    return struct {
+        buffer: [capacity]Message,
+        read_idx: usize,
+        write_idx: usize,
+        item_count: usize,
+
+        const Self = @This();
+
+        fn init() Self {
+            return Self{
+                .buffer = undefined,
+                .read_idx = 0,
+                .write_idx = 0,
+                .item_count = 0,
+            };
+        }
+
+        fn push(self: *Self, msg: Message) void {
+            if (self.item_count >= self.buffer.len) {
+                self.read_idx = (self.read_idx + 1) % self.buffer.len;
+                self.item_count -= 1;
+            }
+            self.buffer[self.write_idx] = msg;
+            self.write_idx = (self.write_idx + 1) % self.buffer.len;
+            self.item_count += 1;
+        }
+
+        fn pop(self: *Self) ?Message {
+            if (self.item_count == 0) {
+                return null;
+            }
+            const msg = self.buffer[self.read_idx];
+            self.read_idx = (self.read_idx + 1) % self.buffer.len;
+            self.item_count -= 1;
+            return msg;
+        }
+
+        fn len(self: *const Self) usize {
+            return self.item_count;
+        }
+
+        fn cap(self: *const Self) usize {
+            return self.buffer.len;
+        }
+
+        fn clear(self: *Self) void {
+            self.read_idx = 0;
+            self.write_idx = 0;
+            self.item_count = 0;
+        }
+    };
+}
 
 const Reporter = struct {
     alloc: std.mem.Allocator,
@@ -564,10 +617,11 @@ const Reporter = struct {
     main_thread: ?std.Thread,
     timer_thread: ?std.Thread,
 
-    queue_mutex: std.Thread.Mutex,
-    queue_cond: std.Thread.Condition,
-    queue: std.ArrayList(Message),
+    msg_queue_mutex: std.Thread.Mutex,
+    msg_queue_cond: std.Thread.Condition,
+    msg_queue: MessageRingBuffer(100),
 
+    testcase_arr_mutex: std.Thread.Mutex,
     testcase_arr: std.ArrayList(Testcase),
 
     timer_mutex: std.Thread.Mutex,
@@ -577,6 +631,7 @@ const Reporter = struct {
     errors: std.ArrayList(ErrorInfo),
 
     flush_rate_ms: u64,
+    testcase_batch_size: u64,
 
     fn init(
         alloc: std.mem.Allocator,
@@ -621,15 +676,17 @@ const Reporter = struct {
             .shutdown = std.atomic.Value(bool).init(false),
             .main_thread = null,
             .timer_thread = null,
-            .queue_mutex = .{},
-            .queue_cond = .{},
-            .queue = std.ArrayList(Message){},
+            .msg_queue_mutex = .{},
+            .msg_queue_cond = .{},
+            .msg_queue = MessageRingBuffer(100).init(),
+            .testcase_arr_mutex = .{},
             .testcase_arr = std.ArrayList(Testcase){},
             .timer_mutex = .{},
             .timer_cond = .{},
             .errors_mutex = .{},
             .errors = std.ArrayList(ErrorInfo){},
             .flush_rate_ms = 5000,
+            .testcase_batch_size = 100,
         };
 
         reporter.main_thread = try std.Thread.spawn(.{}, processThread, .{reporter});
@@ -647,25 +704,21 @@ const Reporter = struct {
         }
 
         {
-            self.queue_mutex.lock();
-            defer self.queue_mutex.unlock();
-            try self.queue.append(self.alloc, Message{ .type = .exit, .payload = null });
-            self.queue_cond.signal();
+            self.msg_queue_mutex.lock();
+            defer self.msg_queue_mutex.unlock();
+            self.msg_queue.push(Message{ .type = .exit, .payload = 0 });
+            self.msg_queue_cond.signal();
         }
 
         if (self.main_thread) |thread| {
             thread.join();
         }
 
-        try self.sendReports();
+        self.msg_queue.clear();
 
-        for (self.queue.items) |msg| {
-            if (msg.payload) |testcase| {
-                testcase.deinit();
-            }
+        for (self.testcase_arr.items) |tc| {
+            tc.deinit();
         }
-        self.queue.deinit(self.alloc);
-
         self.testcase_arr.deinit(self.alloc);
 
         for (self.errors.items) |err_info| {
@@ -678,31 +731,37 @@ const Reporter = struct {
     }
 
     fn processThread(self: *Reporter) !void {
+        var arena = std.heap.ArenaAllocator.init(self.alloc);
+        defer arena.deinit();
+        const thread_alloc = arena.allocator();
+
         self.timer_thread = try std.Thread.spawn(.{}, timerThreadFn, .{self});
 
         while (true) {
-            self.queue_mutex.lock();
+            self.msg_queue_mutex.lock();
 
-            while (self.queue.items.len == 0) {
-                self.queue_cond.wait(&self.queue_mutex);
+            while (self.msg_queue.len() == 0) {
+                self.msg_queue_cond.wait(&self.msg_queue_mutex);
             }
-            const msg = self.queue.orderedRemove(0);
+            const msg = self.msg_queue.pop().?;
 
-            self.queue_mutex.unlock();
+            self.msg_queue_mutex.unlock();
 
             switch (msg.type) {
                 .exit => {
                     if (self.timer_thread) |thread| {
                         thread.join();
                     }
+                    try self.sendReports(thread_alloc);
+
                     return;
                 },
                 .timer => {
-                    try self.sendReports();
+                    try self.sendReports(thread_alloc);
                 },
                 .report => {
-                    if (msg.payload) |testcase| {
-                        try self.testcase_arr.append(self.alloc, testcase);
+                    if (msg.payload > self.testcase_batch_size) {
+                        try self.sendReports(thread_alloc);
                     }
                 },
             }
@@ -738,20 +797,23 @@ const Reporter = struct {
                 break;
             }
 
-            self.queue_mutex.lock();
-            defer self.queue_mutex.unlock();
-            try self.queue.append(self.alloc, Message{ .type = .timer, .payload = null });
-            self.queue_cond.signal();
+            self.msg_queue_mutex.lock();
+            defer self.msg_queue_mutex.unlock();
+            self.msg_queue.push(Message{ .type = .timer, .payload = 0 });
+            self.msg_queue_cond.signal();
         }
     }
 
-    fn sendReports(self: *Reporter) !void {
+    fn sendReports(self: *Reporter, thread_alloc: std.mem.Allocator) !void {
+        self.testcase_arr_mutex.lock();
+        defer self.testcase_arr_mutex.unlock();
+
         if (self.testcase_arr.items.len == 0) {
             return;
         }
 
-        const requests = try self.alloc.alloc(TestcaseRequest, self.testcase_arr.items.len);
-        defer self.alloc.free(requests);
+        const requests = try thread_alloc.alloc(TestcaseRequest, self.testcase_arr.items.len);
+        defer thread_alloc.free(requests);
 
         for (self.testcase_arr.items, 0..) |tc, i| {
             requests[i] = tc.request();
@@ -766,7 +828,7 @@ const Reporter = struct {
             self.testcase_arr.clearRetainingCapacity();
         }
 
-        var out: std.Io.Writer.Allocating = .init(self.alloc);
+        var out: std.Io.Writer.Allocating = .init(thread_alloc);
         defer out.deinit();
 
         try std.json.Stringify.value(request, .{}, &out.writer);
@@ -774,6 +836,7 @@ const Reporter = struct {
 
         var err_detail: ?ErrorDetail = null;
         const resp_body = self.postJson(
+            thread_alloc,
             "/api/v1/ingress/testcases",
             json_str,
             &err_detail,
@@ -789,7 +852,11 @@ const Reporter = struct {
             }
             return;
         };
-        defer self.alloc.free(resp_body);
+        defer thread_alloc.free(resp_body);
+
+        self.msg_queue_mutex.lock();
+        defer self.msg_queue_mutex.unlock();
+        self.msg_queue.clear();
     }
 
     fn popReportError(self: *Reporter) ?ErrorInfo {
@@ -805,16 +872,17 @@ const Reporter = struct {
 
     fn postJson(
         self: *Reporter,
+        alloc: std.mem.Allocator,
         path: []const u8,
         json_body: []u8,
         error_detail: *?ErrorDetail,
     ) ![]const u8 {
-        const url = try std.fmt.allocPrint(self.alloc, "{s}{s}", .{ self.endpoint, path });
-        defer self.alloc.free(url);
+        const url = try std.fmt.allocPrint(alloc, "{s}{s}", .{ self.endpoint, path });
+        defer alloc.free(url);
 
         const uri = try std.Uri.parse(url);
 
-        var client = std.http.Client{ .allocator = self.alloc };
+        var client = std.http.Client{ .allocator = alloc };
         defer client.deinit();
 
         var req = try client.request(.POST, uri, .{
@@ -837,10 +905,10 @@ const Reporter = struct {
 
             var transfer_buffer: [2048]u8 = undefined;
             const body_reader = response.reader(&transfer_buffer);
-            const body = try body_reader.*.allocRemaining(self.alloc, std.Io.Limit.limited(1024 * 1024));
-            defer self.alloc.free(body);
+            const body = try body_reader.*.allocRemaining(alloc, std.Io.Limit.limited(1024 * 1024));
+            defer alloc.free(body);
 
-            const resp_json = try std.json.parseFromSlice(std.json.Value, self.alloc, body, .{});
+            const resp_json = try std.json.parseFromSlice(std.json.Value, alloc, body, .{});
             defer resp_json.deinit();
 
             const error_message = if (resp_json.value.object.get("message")) |msg_value|
@@ -864,7 +932,7 @@ const Reporter = struct {
 
         var transfer_buffer: [2048]u8 = undefined;
         const body_reader = response.reader(&transfer_buffer);
-        return try body_reader.*.allocRemaining(self.alloc, std.Io.Limit.limited(1024 * 1024));
+        return try body_reader.*.allocRemaining(alloc, std.Io.Limit.limited(1024 * 1024));
     }
 
     fn createSession(
@@ -881,7 +949,7 @@ const Reporter = struct {
         try std.json.Stringify.value(session.request(), .{}, &out.writer);
         const json_str = out.written();
 
-        const resp_body = try self.postJson("/api/v1/ingress/sessions", json_str, err_detail);
+        const resp_body = try self.postJson(self.alloc, "/api/v1/ingress/sessions", json_str, err_detail);
         defer self.alloc.free(resp_body);
 
         const resp_json = try std.json.parseFromSlice(std.json.Value, self.alloc, resp_body, .{});
@@ -902,14 +970,101 @@ const Reporter = struct {
     fn createTestcase(
         self: *Reporter,
         testcase: Testcase,
-    ) !void {
-        errdefer testcase.deinit();
+    ) void {
+        self.testcase_arr_mutex.lock();
+        self.testcase_arr.append(self.alloc, testcase) catch {
+            testcase.deinit();
+            self.testcase_arr_mutex.unlock();
+            return;
+        };
+        const arr_len = self.testcase_arr.items.len;
+        self.testcase_arr_mutex.unlock();
 
-        self.queue_mutex.lock();
-        defer self.queue_mutex.unlock();
-
-        try self.queue.append(self.alloc, Message{ .type = .report, .payload = testcase });
-
-        self.queue_cond.signal();
+        self.msg_queue_mutex.lock();
+        defer self.msg_queue_mutex.unlock();
+        self.msg_queue.push(Message{ .type = .report, .payload = arr_len });
+        self.msg_queue_cond.signal();
     }
 };
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+test "MessageRingBuffer: init creates empty buffer" {
+    const queue = MessageRingBuffer(10).init();
+    try std.testing.expectEqual(@as(usize, 0), queue.len());
+    try std.testing.expectEqual(@as(usize, 10), queue.cap());
+}
+
+test "MessageRingBuffer: push messages" {
+    var queue = MessageRingBuffer(10).init();
+
+    queue.push(Message{ .type = .timer, .payload = 0 });
+    queue.push(Message{ .type = .exit, .payload = 0 });
+    queue.push(Message{ .type = .report, .payload = 5 });
+
+    try std.testing.expectEqual(@as(usize, 3), queue.len());
+
+    const msg1 = queue.pop().?;
+    try std.testing.expectEqual(MessageType.timer, msg1.type);
+    try std.testing.expectEqual(@as(usize, 0), msg1.payload);
+
+    const msg2 = queue.pop().?;
+    try std.testing.expectEqual(MessageType.exit, msg2.type);
+    try std.testing.expectEqual(@as(usize, 0), msg2.payload);
+
+    const msg3 = queue.pop().?;
+    try std.testing.expectEqual(MessageType.report, msg3.type);
+    try std.testing.expectEqual(@as(usize, 5), msg3.payload);
+
+    try std.testing.expectEqual(@as(usize, 0), queue.len());
+}
+
+test "MessageRingBuffer: pop from empty queue returns null" {
+    var queue = MessageRingBuffer(10).init();
+
+    const removed = queue.pop();
+    try std.testing.expectEqual(@as(?Message, null), removed);
+}
+
+test "MessageRingBuffer: ring behavior drops oldest message when full" {
+    var queue = MessageRingBuffer(10).init();
+
+    var i: usize = 0;
+    while (i < 10) : (i += 1) {
+        queue.push(Message{ .type = .timer, .payload = 0 });
+    }
+
+    try std.testing.expectEqual(@as(usize, 10), queue.len());
+
+    queue.push(Message{ .type = .exit, .payload = 0 });
+
+    try std.testing.expectEqual(@as(usize, 10), queue.len());
+
+    i = 0;
+    while (i < 9) : (i += 1) {
+        const msg = queue.pop().?;
+        try std.testing.expectEqual(MessageType.timer, msg.type);
+    }
+
+    const last_msg = queue.pop().?;
+    try std.testing.expectEqual(MessageType.exit, last_msg.type);
+
+    try std.testing.expectEqual(@as(usize, 0), queue.len());
+}
+
+test "MessageRingBuffer: clear from full buffer" {
+    var queue = MessageRingBuffer(5).init();
+
+    var i: usize = 0;
+    while (i < 5) : (i += 1) {
+        queue.push(Message{ .type = .report, .payload = i });
+    }
+
+    try std.testing.expectEqual(@as(usize, 5), queue.len());
+
+    queue.clear();
+
+    try std.testing.expectEqual(@as(usize, 0), queue.len());
+}

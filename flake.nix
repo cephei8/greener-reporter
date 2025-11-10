@@ -41,7 +41,7 @@
             export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache
             export HOME=$TMPDIR
 
-            zig build -Doptimize=ReleaseSafe --prefix $TMPDIR/install --seed 0x00000000 -Dtarget=${zigTarget}
+            zig build -Doptimize=ReleaseSafe --seed 0x00000000 -Dtarget=${zigTarget}
 
             runHook postBuild
           '';
@@ -51,9 +51,9 @@
           installPhase = ''
             runHook preInstall
             mkdir -p $out
-            cp -r $TMPDIR/install/lib/* $out/
+            cp -r zig-out/lib/* $out/
             if [[ "${zigTarget}" == *"windows"* ]]; then
-              cp -r $TMPDIR/install/bin/*.dll $out/
+              cp -r zig-out/bin/*.dll $out/
             fi
             runHook postInstall
           '';
@@ -77,9 +77,7 @@
           default = buildForTarget defaultTarget;
           x86_64-linux-gnu = buildForTarget "x86_64-linux-gnu";
           aarch64-linux-gnu = buildForTarget "aarch64-linux-gnu";
-          x86_64-linux-musl = buildForTarget "x86_64-linux-musl";
-          aarch64-linux-musl = buildForTarget "aarch64-linux-musl";
-          x86_64-windows-msvc = buildForTarget "x86_64-windows-msvc";
+          x86_64-windows = buildForTarget "x86_64-windows";
           x86_64-macos = buildForTarget "x86_64-macos";
           aarch64-macos = buildForTarget "aarch64-macos";
         };
