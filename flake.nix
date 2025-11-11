@@ -41,7 +41,7 @@
             export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache
             export HOME=$TMPDIR
 
-            zig build -Doptimize=ReleaseSafe --seed 0x00000000 -Dtarget=${zigTarget}
+            zig build -Dtarget=${zigTarget} -Doptimize=ReleaseSafe --seed 0x00000000
 
             runHook postBuild
           '';
@@ -77,7 +77,7 @@
           default = buildForTarget defaultTarget;
           x86_64-linux-gnu = buildForTarget "x86_64-linux-gnu";
           aarch64-linux-gnu = buildForTarget "aarch64-linux-gnu";
-          x86_64-windows = buildForTarget "x86_64-windows";
+          x86_64-windows-msvc = buildForTarget "x86_64-windows-msvc";
           x86_64-macos = buildForTarget "x86_64-macos";
           aarch64-macos = buildForTarget "aarch64-macos";
         };
