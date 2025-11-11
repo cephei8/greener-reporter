@@ -8,10 +8,6 @@ updates:
     directory: "/servermock-rs"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "cargo"
-    directory: "/tests-ffi-rs"
-    schedule:
-      interval: "weekly"
   - package-ecosystem: "gomod"
     directory: "/tests-ffi"
     schedule:
