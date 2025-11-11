@@ -2,5 +2,4 @@
 resolver = "3"
 members = [
     "servermock-rs",
-    "tests-ffi-rs",
 ]
