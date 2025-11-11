@@ -14,7 +14,7 @@ on:
         default: false
 
 env:
-  TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-windows x86_64-macos aarch64-macos"
+  TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-windows-msvc x86_64-macos aarch64-macos"
 
 jobs:
   release_build_validate:
@@ -83,7 +83,7 @@ jobs:
           - os: ubuntu-24.04-arm
             target_name: "aarch64-linux-gnu"
           - os: windows-latest
-            target_name: "x86_64-windows"
+            target_name: "x86_64-windows-msvc"
           - os: macos-15-intel
             target_name: "x86_64-macos"
           - os: macos-15
@@ -236,11 +236,11 @@ jobs:
 
       - uses: actions/download-artifact@v6
         with:
-          name: greener-reporter-lib-x86_64-windows.tar.gz
+          name: greener-reporter-lib-x86_64-windows-msvc.tar.gz
           path: ./release_tars
       - uses: actions/download-artifact@v6
         with:
-          name: greener-servermock-lib-x86_64-windows.tar.gz
+          name: greener-servermock-lib-x86_64-windows-msvc.tar.gz
           path: ./release_tars
 
       - uses: actions/download-artifact@v6
