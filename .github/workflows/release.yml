@@ -152,34 +152,15 @@ jobs:
           cp -r zig-libs/${{ matrix.target_name }}/* ./zig-out/lib/
 
       - name: Build Rust part
-        run: cargo build --release
-
-      - if: runner.os == 'macOS'
-        name: Fix rpath
-        run: |
-          install_name_tool -id @rpath/libgreener_servermock.dylib target/release/libgreener_servermock.dylib
+        run: cargo build
 
       - name: Copy lib files
         run: |
           cp zig-out/lib/* tests-ffi/
-          cp zig-out/lib/* target/release/
-
-      - if: runner.os == 'macOS'
-        name: Copy lib files (macOS)
-        run: cp target/release/libgreener_servermock.dylib tests-ffi/
-
-      - if: runner.os == 'Linux'
-        name: Copy lib files (Linux)
-        run: cp target/release/libgreener_servermock.so tests-ffi/
-
-      - if: runner.os == 'Windows'
-        name: Copy lib files (Windows)
-        run: |
-          cp target/release/greener_servermock.dll tests-ffi/
-          cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
+          cp zig-out/lib/* target/debug/
 
       - name: Run Rust tests
-        run: cargo test --release -- --nocapture
+        run: cargo test -- --nocapture
 
       - name: Create release tar directories
         run: |
@@ -201,22 +182,6 @@ jobs:
         name: Prepare greener_reporter (Zig) release tar
         run: |
           cp zig-out/lib/libgreener_reporter.so release_tar/reporter
-
-      - if: runner.os == 'Windows'
-        name: Prepare servermock (Rust) release tar
-        run: |
-          cp target/release/greener_servermock.dll release_tar/servermock
-          cp target/release/greener_servermock.lib release_tar/servermock
-
-      - if: runner.os == 'macOS'
-        name: Prepare servermock (Rust) release tar
-        run: |
-          cp target/release/libgreener_servermock.dylib release_tar/servermock
-
-      - if: runner.os == 'Linux'
-        name: Prepare servermock (Rust) release tar
-        run: |
-          cp target/release/libgreener_servermock.so release_tar/servermock
 
       - name: Create release tars
         run: |
