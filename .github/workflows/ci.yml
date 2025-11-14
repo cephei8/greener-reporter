@@ -24,13 +24,12 @@ jobs:
           docker cp zig-builder:/output/. ./zig-out/lib/
 
       - name: Build Rust part
-        run: cargo build --release
+        run: cargo build
 
       - name: Copy lib files
         run: |
           cp zig-out/lib/* tests-ffi/
-          cp zig-out/lib/* target/release/
-          cp target/release/libgreener_servermock.so tests-ffi/
+          cp zig-out/lib/* target/debug/
 
       - name: Run Rust tests
-        run: cargo test --release
+        run: cargo test

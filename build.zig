@@ -10,11 +10,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // const servermock_module = b.createModule(.{
-    //     .root_source_file = b.path("src/servermock.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+    const servermock_module = b.createModule(.{
+        .root_source_file = b.path("src/servermock.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const cli_module = b.createModule(.{
         .root_source_file = b.path("src/reporter_cli.zig"),
@@ -37,13 +37,13 @@ pub fn build(b: *std.Build) void {
     });
     reporter_static.linkLibC();
 
-    // const servermock = b.addLibrary(.{
-    //     .name = "greener_servermock",
-    //     .root_module = servermock_module,
-    //     .linkage = .dynamic,
-    // });
-    // servermock.linkLibC();
-    // b.installArtifact(servermock);
+    const servermock = b.addLibrary(.{
+        .name = "greener_servermock",
+        .root_module = servermock_module,
+        .linkage = .dynamic,
+    });
+    servermock.linkLibC();
+    b.installArtifact(servermock);
 
     const test_module = b.createModule(.{
         .root_source_file = b.path("src/test.zig"),
@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) void {
         .root_module = test_module,
     });
     tests.linkLibrary(reporter);
-    // tests.linkLibrary(servermock);
+    tests.linkLibrary(servermock);
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run tests");
