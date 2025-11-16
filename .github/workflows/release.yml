@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -12,9 +13,6 @@ on:
         required: false
         type: boolean
         default: false
-
-env:
-  TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-macos aarch64-macos"
 
 jobs:
   release_build_validate:
@@ -38,37 +36,54 @@ jobs:
           fi
           echo "Pre-release tag format is valid: $TAG"
 
-  release_build:
-    name: Build libraries
-    runs-on: ubuntu-latest
-    needs: release_build_validate
+  # release_build:
+  #   name: Build libraries
+  #   runs-on: ubuntu-latest
+  #   needs: release_build_validate
 
-    defaults:
-      run:
-        shell: bash
+  #   defaults:
+  #     run:
+  #       shell: bash
 
-    steps:
-      - uses: actions/checkout@v5
+  #   steps:
+  #     - uses: actions/checkout@v5
 
-      - name: Build
-        run: |
-          docker build \
-            --build-arg TARGETS="${{ env.TARGETS }}" \
-            -t greener-reporter-zig:all \
-            .
+  #     - name: Install Nix
+  #       uses: cachix/install-nix-action@v31
+  #       with:
+  #         extra_nix_config: |
+  #           experimental-features = nix-command flakes
 
-      - name: Extract libraries from container
-        run: |
-          docker run --name zig-builder greener-reporter-zig:all
-          docker cp zig-builder:/output/. ./zig-libs/
+  #     - name: Test
+  #       run: nix flake check
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: zig-libs-all
-          path: zig-libs/
-          if-no-files-found: error
-          retention-days: 1
+  #     - name: Build all targets
+  #       run: |
+  #         mkdir -p zig-libs
+
+  #         nix build .#x86_64-linux-gnu --print-build-logs
+  #         mkdir -p zig-libs/x86_64-linux-gnu
+  #         cp -r result/* zig-libs/x86_64-linux-gnu/
+
+  #         nix build .#aarch64-linux-gnu --print-build-logs
+  #         mkdir -p zig-libs/aarch64-linux-gnu
+  #         cp -r result/* zig-libs/aarch64-linux-gnu/
+
+  #         nix build .#x86_64-macos --print-build-logs
+  #         mkdir -p zig-libs/x86_64-macos
+  #         cp -r result/* zig-libs/x86_64-macos/
+
+  #         nix build .#aarch64-macos --print-build-logs
+  #         mkdir -p zig-libs/aarch64-macos
+  #         cp -r result/* zig-libs/aarch64-macos/
+
+  #     - name: Upload artifacts
+  #       uses: actions/upload-artifact@v5
+  #       with:
+  #         name: zig-libs-all
+  #         path: zig-libs/
+  #         if-no-files-found: error
+  #         retention-days: 1
 
   release_build_nix_windows:
     name: Build library on Windows
@@ -91,6 +106,7 @@ jobs:
       - name: Build with Zig
         run: |
           zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-windows-msvc
+          zig build test
       - name: Prepare artifacts
         run: |
           mkdir -p zig-libs/x86_64-windows-msvc
@@ -109,7 +125,8 @@ jobs:
   release_build_rs:
     name: (Release) Build and test for ${{ matrix.target_name }}
     runs-on: ${{ matrix.os }}
-    needs: [release_build, release_build_nix_windows]
+    needs: release_build_nix_windows
+    # needs: [release_build, release_build_nix_windows]
 
     strategy:
       matrix:
@@ -151,16 +168,8 @@ jobs:
           mkdir -p ./zig-out/lib
           cp -r zig-libs/${{ matrix.target_name }}/* ./zig-out/lib/
 
-      - name: Build Rust part
-        run: cargo build
-
-      - name: Copy lib files
-        run: |
-          cp zig-out/lib/* tests-ffi/
-          cp zig-out/lib/* target/debug/
-
-      - name: Run Rust tests
-        run: cargo test -- --nocapture
+      - name: Run FFI tests
+        run: zig build test
 
       - name: Create release tar directories
         run: |
@@ -267,6 +276,8 @@ jobs:
         run: |
           tar -czf greener-reporter-include.tar.gz -C ../include greener_reporter
           tar -czf greener-servermock-include.tar.gz -C ../include greener_servermock
+
+      - run: exit 1
 
       - name: Create release
         run: |

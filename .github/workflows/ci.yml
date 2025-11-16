@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_request:
+  # pull_request:
 
 jobs:
   ci_build:
@@ -11,25 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build and tests
         run: |
-          docker build -t greener-reporter-zig:latest .
-
-      - name: Create output directory
-        run: mkdir -p ./zig-out/lib
-
-      - name: Copy to host
-        run: |
-          docker run --name zig-builder greener-reporter-zig:latest
-          docker cp zig-builder:/output/. ./zig-out/lib/
-
-      - name: Build Rust part
-        run: cargo build
-
-      - name: Copy lib files
-        run: |
-          cp zig-out/lib/* tests-ffi/
-          cp zig-out/lib/* target/debug/
-
-      - name: Run Rust tests
-        run: cargo test
+          nix develop --command zig build test

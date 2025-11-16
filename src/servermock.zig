@@ -388,6 +388,13 @@ const Servermock = struct {
     fn deinit(self: *Servermock) void {
         if (self.server_thread != null) {
             self.shutdown.store(true, .release);
+
+            if (self.tcp_server) |server| {
+                server.deinit();
+                self.alloc.destroy(server);
+                self.tcp_server = null;
+            }
+
             if (self.server_thread) |thread| {
                 thread.join();
             }
@@ -478,8 +485,13 @@ const Servermock = struct {
         };
 
         while (!self.shutdown.load(.acquire)) {
-            const connection = try tcp_server.accept();
-            try handleConnection(connection, &context);
+            const conn = tcp_server.accept() catch |err| {
+                if (self.shutdown.load(.acquire)) {
+                    return;
+                }
+                return err;
+            };
+            try handleConnection(conn, &context);
         }
     }
 

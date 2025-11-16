@@ -41,7 +41,7 @@
             export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache
             export HOME=$TMPDIR
 
-            zig build -Dtarget=${zigTarget} -Doptimize=ReleaseSafe --seed 0x00000000
+            zig build -Dtarget=${zigTarget} -Doptimize=ReleaseSafe
 
             runHook postBuild
           '';
@@ -100,7 +100,7 @@
               export HOME=$TMPDIR
 
               echo "Running tests"
-              zig build test --seed 0x00000000
+              zig build test
 
               runHook postCheck
             '';
