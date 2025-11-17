@@ -106,7 +106,7 @@ jobs:
       - name: Build with Zig
         run: |
           zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-windows-msvc
-          zig build test
+          zig build test -Dtarget=x86_64-windows-msvc
       - name: Prepare artifacts
         run: |
           mkdir -p zig-libs/x86_64-windows-msvc
