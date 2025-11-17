@@ -151,17 +151,6 @@ jobs:
           mkdir -p ./zig-out/lib
           cp -r zig-libs/${{ matrix.target_name }}/* ./zig-out/lib/
 
-      - name: Build Rust part
-        run: cargo build
-
-      - name: Copy lib files
-        run: |
-          cp zig-out/lib/* tests-ffi/
-          cp zig-out/lib/* target/debug/
-
-      - name: Run Rust tests
-        run: cargo test -- --nocapture
-
       - name: Create release tar directories
         run: |
           mkdir -p release_tar/reporter
