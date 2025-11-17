@@ -54,6 +54,7 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{
         .root_module = test_module,
     });
+    tests.addIncludePath(b.path("include"));
     tests.linkLibrary(reporter);
     tests.linkLibrary(servermock);
 

@@ -386,22 +386,24 @@ const Servermock = struct {
     }
 
     fn deinit(self: *Servermock) void {
-        if (self.server_thread != null) {
-            self.shutdown.store(true, .release);
-            if (self.server_thread) |thread| {
-                thread.join();
-            }
-        }
+        self.shutdown.store(true, .release);
 
         if (self.tcp_server) |server| {
             server.deinit();
             self.alloc.destroy(server);
+            self.tcp_server = null;
         }
 
+        if (self.server_thread) |thread| {
+            thread.join();
+        }
+
+        self.mutex.lock();
         for (self.recorded_calls.items) |call| {
             call.deinit(self.alloc);
         }
         self.recorded_calls.deinit(self.alloc);
+        self.mutex.unlock();
 
         for (self.fixtures.items) |fixture| {
             fixture.deinit(self.alloc);
@@ -467,7 +469,7 @@ const Servermock = struct {
         self.server_thread = try std.Thread.spawn(.{}, serverThread, .{self});
     }
 
-    fn serverThread(self: *Servermock) !void {
+    fn serverThread(self: *Servermock) void {
         const tcp_server = self.tcp_server orelse return;
 
         var context = ServerContext{
@@ -478,8 +480,18 @@ const Servermock = struct {
         };
 
         while (!self.shutdown.load(.acquire)) {
-            const connection = try tcp_server.accept();
-            try handleConnection(connection, &context);
+            const connection = tcp_server.accept() catch |err| {
+                if (self.shutdown.load(.acquire)) {
+                    return;
+                }
+                std.debug.print("accept() error: {}\n", .{err});
+                continue;
+            };
+
+            handleConnection(connection, &context) catch |err| {
+                std.debug.print("handleConnection() error: {}\n", .{err});
+                connection.stream.close();
+            };
         }
     }
 
