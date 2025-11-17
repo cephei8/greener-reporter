@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -95,9 +96,9 @@ jobs:
         run: |
           mkdir -p zig-libs/x86_64-windows-msvc
           cp -r zig-out/lib/* zig-libs/x86_64-windows-msvc/
-          if [ -f zig-out/bin/*.dll ]; then
-            cp -r zig-out/bin/*.dll zig-libs/x86_64-windows-msvc/
-          fi
+          cp zig-out/bin/greener_reporter.dll zig-libs/x86_64-windows-msvc/
+          cp zig-out/bin/greener_servermock.dll zig-libs/x86_64-windows-msvc/
+          
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
@@ -256,6 +257,8 @@ jobs:
         run: |
           tar -czf greener-reporter-include.tar.gz -C ../include greener_reporter
           tar -czf greener-servermock-include.tar.gz -C ../include greener_servermock
+
+      - run: exit 1
 
       - name: Create release
         run: |
