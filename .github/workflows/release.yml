@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -151,16 +152,17 @@ jobs:
           mkdir -p ./zig-out/lib
           cp -r zig-libs/${{ matrix.target_name }}/* ./zig-out/lib/
 
-      - name: Build Rust part
-        run: cargo build
-
       - name: Copy lib files
         run: |
           cp zig-out/lib/* tests-ffi/
-          cp zig-out/lib/* target/debug/
 
-      - name: Run Rust tests
-        run: cargo test -- --nocapture
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "^1.25"
+
+      - name: Run tests
+        run: go test
+        working-directory: tests-ffi
 
       - name: Create release tar directories
         run: |
@@ -267,6 +269,8 @@ jobs:
         run: |
           tar -czf greener-reporter-include.tar.gz -C ../include greener_reporter
           tar -czf greener-servermock-include.tar.gz -C ../include greener_servermock
+
+      - run: exit 1
 
       - name: Create release
         run: |
