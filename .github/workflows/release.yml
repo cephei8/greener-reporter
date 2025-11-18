@@ -13,21 +13,14 @@ on:
         type: boolean
         default: false
 
-env:
-  TARGETS: "x86_64-linux-gnu aarch64-linux-gnu x86_64-macos aarch64-macos"
-
 jobs:
   release_build_validate:
     name: Validate release
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        shell: bash
-
     steps:
       - name: Validate pre-release tag format
         if: inputs.prerelease == true
+        shell: bash
         run: |
           TAG="${{ inputs.release_tag }}"
           if ! echo "$TAG" | grep -qE -- '-(alpha|beta|rc|pre|preview|dev|nightly)'; then
@@ -39,10 +32,22 @@ jobs:
           echo "Pre-release tag format is valid: $TAG"
 
   release_build:
-    name: Build libraries
-    runs-on: ubuntu-latest
+    name: (Release) Build libs on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     needs: release_build_validate
-
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target_name: "linux-x64"
+          - os: ubuntu-24.04-arm
+            target_name: "linux-arm64"
+          - os: windows-latest
+            target_name: "win-x64"
+          - os: macos-15-intel
+            target_name: "mac-x64"
+          - os: macos-15
+            target_name: "mac-arm64"
     defaults:
       run:
         shell: bash
@@ -52,104 +57,22 @@ jobs:
 
       - name: Build
         run: |
-          docker build \
-            --build-arg TARGETS="${{ env.TARGETS }}" \
-            -t greener-reporter-zig:all \
-            .
+          cargo build --release
 
-      - name: Extract libraries from container
+      - if: runner.os == 'macOS'
+        name: Fix rpath for libs
         run: |
-          docker run --name zig-builder greener-reporter-zig:all
-          docker cp zig-builder:/output/. ./zig-libs/
+          install_name_tool -id @rpath/libgreener_reporter.dylib target/release/libgreener_reporter.dylib
+          install_name_tool -id @rpath/libgreener_servermock.dylib target/release/libgreener_servermock.dylib
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: zig-libs-all
-          path: zig-libs/
-          if-no-files-found: error
-          retention-days: 1
-
-  release_build_nix_windows:
-    name: Build library on Windows
-    runs-on: windows-latest
-    needs: release_build_validate
-
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Zig
-        shell: pwsh
+      - if: runner.os == 'Windows'
+        name: Rename lib files
         run: |
-          Invoke-WebRequest -Uri https://ziglang.org/download/0.15.2/zig-x86_64-windows-0.15.2.zip -OutFile zig.zip
-          Expand-Archive -Path zig.zip -DestinationPath .
-          echo "${{ github.workspace }}/zig-x86_64-windows-0.15.2" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Build with Zig
-        run: |
-          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-windows-msvc
-      - name: Prepare artifacts
-        run: |
-          mkdir -p zig-libs/x86_64-windows-msvc
-          cp -r zig-out/lib/* zig-libs/x86_64-windows-msvc/
-          cp zig-out/bin/greener_reporter.dll zig-libs/x86_64-windows-msvc/
-          cp zig-out/bin/greener_servermock.dll zig-libs/x86_64-windows-msvc/
+          cp target/release/greener_reporter.dll.lib target/release/greener_reporter.lib
+          cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: zig-libs-x86_64-windows-msvc
-          path: zig-libs/
-          if-no-files-found: error
-          retention-days: 1
-
-  release_pack:
-    name: (Release) Pack
-    runs-on: ${{ matrix.os }}
-    needs: [release_build, release_build_nix_windows]
-
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target_name: "x86_64-linux-gnu"
-          - os: ubuntu-24.04-arm
-            target_name: "aarch64-linux-gnu"
-          - os: windows-latest
-            target_name: "x86_64-windows-msvc"
-          - os: macos-15-intel
-            target_name: "x86_64-macos"
-          - os: macos-15
-            target_name: "aarch64-macos"
-
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - if: matrix.target_name != 'x86_64-windows-msvc'
-        name: Download Zig libs
-        uses: actions/download-artifact@v6
-        with:
-          name: zig-libs-all
-          path: zig-libs
-
-      - if: matrix.target_name == 'x86_64-windows-msvc'
-        name: Download Zig libs (Windows MSVC)
-        uses: actions/download-artifact@v6
-        with:
-          name: zig-libs-x86_64-windows-msvc
-          path: zig-libs
-
-      - name: Copy Zig libs to output directory
-        run: |
-          mkdir -p ./zig-out/lib
-          cp -r zig-libs/${{ matrix.target_name }}/* ./zig-out/lib/
+      - name: Run tests
+        run: cargo test --release
 
       - name: Create release tar directories
         run: |
@@ -157,24 +80,24 @@ jobs:
           mkdir -p release_tar/servermock
 
       - if: runner.os == 'Windows'
-        name: Prepare greener_reporter (Zig) release tar
+        name: Prepare release tar directories
         run: |
-          cp zig-out/lib/greener_reporter.dll release_tar/reporter
-          cp zig-out/lib/greener_reporter.lib release_tar/reporter
-          cp zig-out/lib/greener_servermock.dll release_tar/servermock
-          cp zig-out/lib/greener_servermock.lib release_tar/servermock
+          cp target/release/greener_reporter.dll release_tar/reporter
+          cp target/release/greener_reporter.lib release_tar/reporter
+          cp target/release/greener_servermock.dll release_tar/servermock
+          cp target/release/greener_servermock.lib release_tar/servermock
 
       - if: runner.os == 'macOS'
-        name: Prepare greener_reporter (Zig) release tar
+        name: Prepare release tar directories
         run: |
-          cp zig-out/lib/libgreener_reporter.dylib release_tar/reporter
-          cp zig-out/lib/libgreener_servermock.dylib release_tar/servermock
+          cp target/release/libgreener_reporter.dylib release_tar/reporter
+          cp target/release/libgreener_servermock.dylib release_tar/servermock
 
       - if: runner.os == 'Linux'
-        name: Prepare greener_reporter (Zig) release tar
+        name: Prepare release tar directories
         run: |
-          cp zig-out/lib/libgreener_reporter.so release_tar/reporter
-          cp zig-out/lib/libgreener_servermock.so release_tar/servermock
+          cp target/release/libgreener_reporter.so release_tar/reporter
+          cp target/release/libgreener_servermock.so release_tar/servermock
 
       - name: Create release tars
         run: |
@@ -197,69 +120,28 @@ jobs:
 
   release_create:
     name: (Release) Create release
-    needs: release_pack
+    needs: release_build
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
     defaults:
       run:
         shell: bash
+
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/download-artifact@v6
         with:
-          name: greener-reporter-lib-x86_64-linux-gnu.tar.gz
-          path: ./release_tars
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-servermock-lib-x86_64-linux-gnu.tar.gz
-          path: ./release_tars
-
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-reporter-lib-aarch64-linux-gnu.tar.gz
-          path: ./release_tars
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-servermock-lib-aarch64-linux-gnu.tar.gz
-          path: ./release_tars
-
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-reporter-lib-x86_64-windows-msvc.tar.gz
-          path: ./release_tars
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-servermock-lib-x86_64-windows-msvc.tar.gz
-          path: ./release_tars
-
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-reporter-lib-x86_64-macos.tar.gz
-          path: ./release_tars
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-servermock-lib-x86_64-macos.tar.gz
-          path: ./release_tars
-
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-reporter-lib-aarch64-macos.tar.gz
-          path: ./release_tars
-      - uses: actions/download-artifact@v6
-        with:
-          name: greener-servermock-lib-aarch64-macos.tar.gz
-          path: ./release_tars
+          path: release_tars
+          merge-multiple: true
 
       - name: Create include tars
         working-directory: release_tars
         run: |
-          tar -czf greener-reporter-include.tar.gz -C ../include greener_reporter
-          tar -czf greener-servermock-include.tar.gz -C ../include greener_servermock
+          tar -czf greener-reporter-include.tar.gz -C ../dist/include greener_reporter
+          tar -czf greener-servermock-include.tar.gz -C ../dist/include greener_servermock
 
       - name: Create release
         run: |
