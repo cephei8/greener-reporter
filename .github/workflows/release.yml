@@ -197,7 +197,7 @@ jobs:
 
   release_create:
     name: (Release) Create release
-    needs: release_build_rs
+    needs: release_pack
     runs-on: ubuntu-latest
 
     permissions:
