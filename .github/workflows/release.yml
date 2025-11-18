@@ -97,7 +97,7 @@ jobs:
           cp -r zig-out/lib/* zig-libs/x86_64-windows-msvc/
           cp zig-out/bin/greener_reporter.dll zig-libs/x86_64-windows-msvc/
           cp zig-out/bin/greener_servermock.dll zig-libs/x86_64-windows-msvc/
-          
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
@@ -106,8 +106,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  release_build_rs:
-    name: (Release) Build and test for ${{ matrix.target_name }}
+  release_pack:
+    name: (Release) Pack
     runs-on: ${{ matrix.os }}
     needs: [release_build, release_build_nix_windows]
 
@@ -161,16 +161,20 @@ jobs:
         run: |
           cp zig-out/lib/greener_reporter.dll release_tar/reporter
           cp zig-out/lib/greener_reporter.lib release_tar/reporter
+          cp zig-out/lib/greener_servermock.dll release_tar/servermock
+          cp zig-out/lib/greener_servermock.lib release_tar/servermock
 
       - if: runner.os == 'macOS'
         name: Prepare greener_reporter (Zig) release tar
         run: |
           cp zig-out/lib/libgreener_reporter.dylib release_tar/reporter
+          cp zig-out/lib/libgreener_servermock.dylib release_tar/servermock
 
       - if: runner.os == 'Linux'
         name: Prepare greener_reporter (Zig) release tar
         run: |
           cp zig-out/lib/libgreener_reporter.so release_tar/reporter
+          cp zig-out/lib/libgreener_servermock.so release_tar/servermock
 
       - name: Create release tars
         run: |
