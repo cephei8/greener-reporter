@@ -1,5 +1,26 @@
 version: 2
 updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "cargo"
+    directory: "/reporter"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "cargo"
+    directory: "/reporter-cli"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "cargo"
+    directory: "/servermock"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "cargo"
+    directory: "/tests-ffi"
+    schedule:
+      interval: "weekly"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

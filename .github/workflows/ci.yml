@@ -11,6 +11,5 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build
-        run: |
-          docker build -t greener-reporter-zig:latest .
+      - run: cargo build --target x86_64-unknown-linux-gnu
+      - run: cargo test
