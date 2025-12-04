@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag"
+        required: true
+        type: string
+      prerelease:
+        description: "Create as pre-release"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release_build_validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate pre-release tag format
+        if: inputs.prerelease == true
+        shell: bash
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          if ! echo "$TAG" | grep -qE -- '-(alpha|beta|rc|pre|preview|dev|nightly)'; then
+            echo "Error: Pre-release tag must contain a suffix like -alpha, -beta, -rc1, etc."
+            echo "  Examples: v1.0.0-beta, v2.0.0-rc1, v1.5.0-alpha.1"
+            echo "  Your tag: $TAG"
+            exit 1
+          fi
+          echo "Pre-release tag format is valid: $TAG"
+
+  release_build:
+    name: (Release) Build libs on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: release_build_validate
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target_name: "linux-x64"
+          - os: ubuntu-24.04-arm
+            target_name: "linux-arm64"
+          - os: windows-latest
+            target_name: "win-x64"
+          - os: macos-15-intel
+            target_name: "mac-x64"
+          - os: macos-15
+            target_name: "mac-arm64"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build
+        run: |
+          cargo build --release
+
+      - if: runner.os == 'macOS'
+        name: Fix rpath for libs
+        run: |
+          install_name_tool -id @rpath/libgreener_reporter.dylib target/release/libgreener_reporter.dylib
+          install_name_tool -id @rpath/libgreener_servermock.dylib target/release/libgreener_servermock.dylib
+
+      - if: runner.os == 'Windows'
+        name: Rename lib files
+        run: |
+          cp target/release/greener_reporter.dll.lib target/release/greener_reporter.lib
+          cp target/release/greener_servermock.dll.lib target/release/greener_servermock.lib
+
+      - name: Run tests
+        run: cargo test --release
+
+      - name: Create release tar directories
+        run: |
+          mkdir -p release_tar/reporter
+          mkdir -p release_tar/servermock
+
+      - if: runner.os == 'Windows'
+        name: Prepare release tar directories
+        run: |
+          cp target/release/greener_reporter.dll release_tar/reporter
+          cp target/release/greener_reporter.lib release_tar/reporter
+          cp target/release/greener_servermock.dll release_tar/servermock
+          cp target/release/greener_servermock.lib release_tar/servermock
+
+      - if: runner.os == 'macOS'
+        name: Prepare release tar directories
+        run: |
+          cp target/release/libgreener_reporter.dylib release_tar/reporter
+          cp target/release/libgreener_servermock.dylib release_tar/servermock
+
+      - if: runner.os == 'Linux'
+        name: Prepare release tar directories
+        run: |
+          cp target/release/libgreener_reporter.so release_tar/reporter
+          cp target/release/libgreener_servermock.so release_tar/servermock
+
+      - name: Create release tars
+        run: |
+          tar -czf greener-reporter-lib-${{ matrix.target_name }}.tar.gz -C release_tar/reporter .
+          tar -czf greener-servermock-lib-${{ matrix.target_name }}.tar.gz -C release_tar/servermock .
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
+          path: greener-reporter-lib-${{ matrix.target_name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
+          path: greener-servermock-lib-${{ matrix.target_name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  release_create:
+    name: (Release) Create release
+    needs: release_build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v6
+        with:
+          path: release_tars
+          merge-multiple: true
+
+      - name: Create include tars
+        working-directory: release_tars
+        run: |
+          tar -czf greener-reporter-include.tar.gz -C ../dist/include greener_reporter
+          tar -czf greener-servermock-include.tar.gz -C ../dist/include greener_servermock
+
+      - name: Create release
+        run: |
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create ${{ inputs.release_tag }} $PRERELEASE_FLAG ./release_tars/*
+        env:
+          GH_TOKEN: ${{ github.token }}
